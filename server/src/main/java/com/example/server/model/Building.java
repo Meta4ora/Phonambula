@@ -1,14 +1,12 @@
 package com.example.server.model;
 
-import jakarta.persistence.Column;
-import jakarta.persistence.Entity;
-import jakarta.persistence.Id;
-import jakarta.persistence.Table;
+import jakarta.persistence.*;
 
 @Entity
 @Table(name = "buildings")
 public class Building {
     @Id
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
     @Column(name = "id_building", nullable = false)
     private Integer id;
 
@@ -17,6 +15,16 @@ public class Building {
 
     @Column(name = "address", nullable = false, length = Integer.MAX_VALUE)
     private String address;
+
+    // Пустой конструктор (нужен для JPA)
+    public Building() {
+    }
+
+    // Конструктор для создания роли без ID
+    public Building(String nameBuilding, String address) {
+        this.nameBuilding = nameBuilding;
+        this.address = address;
+    }
 
     public Integer getId() {
         return id;

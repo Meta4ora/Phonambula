@@ -1,29 +1,29 @@
 package com.example.server.model;
 
 import jakarta.persistence.*;
-
 import java.time.LocalDate;
 
 @Entity
 @Table(name = "subscribers")
 public class Subscriber {
     @Id
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
     @Column(name = "id_subscriber", nullable = false)
     private Long id;
 
-    @ManyToOne(fetch = FetchType.LAZY, optional = false)
+    @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "id_user", nullable = false)
-    private com.example.server.model.User idUser;
+    private User idUser;
 
-    @ManyToOne(fetch = FetchType.LAZY, optional = false)
+    @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "id_post", nullable = false)
     private Post idPost;
 
-    @ManyToOne(fetch = FetchType.LAZY, optional = false)
+    @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "id_division", nullable = false)
     private Division idDivision;
 
-    @ManyToOne(fetch = FetchType.LAZY, optional = false)
+    @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "id_building", nullable = false)
     private Building idBuilding;
 
@@ -42,6 +42,26 @@ public class Subscriber {
     @Column(name = "mobile_phone_number", length = Integer.MAX_VALUE)
     private String mobilePhoneNumber;
 
+    // Пустой конструктор
+    public Subscriber() {
+    }
+
+    // Конструктор для создания абонента
+    public Subscriber(User user, Post post, Division division, Building building,
+                      LocalDate dateBirth, String cabinetNumber, String internalPhoneNumber,
+                      String landlinePhoneNumber, String mobilePhoneNumber) {
+        this.idUser = user;
+        this.idPost = post;
+        this.idDivision = division;
+        this.idBuilding = building;
+        this.dateBirth = dateBirth;
+        this.cabinetNumber = cabinetNumber;
+        this.internalPhoneNumber = internalPhoneNumber;
+        this.landlinePhoneNumber = landlinePhoneNumber;
+        this.mobilePhoneNumber = mobilePhoneNumber;
+    }
+
+    // Геттеры и сеттеры
     public Long getId() {
         return id;
     }
@@ -50,11 +70,11 @@ public class Subscriber {
         this.id = id;
     }
 
-    public com.example.server.model.User getIdUser() {
+    public User getIdUser() {
         return idUser;
     }
 
-    public void setIdUser(com.example.server.model.User idUser) {
+    public void setIdUser(User idUser) {
         this.idUser = idUser;
     }
 
@@ -121,5 +141,4 @@ public class Subscriber {
     public void setMobilePhoneNumber(String mobilePhoneNumber) {
         this.mobilePhoneNumber = mobilePhoneNumber;
     }
-
 }
