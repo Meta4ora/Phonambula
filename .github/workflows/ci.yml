@@ -44,8 +44,12 @@ jobs:
       # 5. Запуск контейнера в фоне
       - name: Run backend container
         run: |
-          docker run -d --name phonambula-backend -p 58080:8080 phonambula-backend:latest
-          echo "Backend container started"
+          HOST_PORT=$(shuf -i 50000-60000 -n 1)
+          echo "Using host port $HOST_PORT"
+          docker run -d --name phonambula-backend -p $HOST_PORT:8080 phonambula-backend:latest
+          sleep 20
+          RESPONSE=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:$HOST_PORT/api/users)
+          echo "Users API returned $RESPONSE"
 
       # 6. Ждём, чтобы сервис поднялся
       - name: Wait for backend
