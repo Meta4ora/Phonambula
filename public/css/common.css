@@ -1,0 +1,81 @@
+:root {
+    --blue-light: #E3F2FD;
+    --blue: #42A5F5;
+    --blue-dark: #1E88E5;
+    --white: #FFFFFF;
+    --gray-light: #F7F9FC;
+    --gray: #90A4AE;
+    --text-dark: #263238;
+}
+
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+    font-family: 'Inter', sans-serif;
+}
+
+body {
+    background: var(--gray-light);
+    color: var(--text-dark);
+    min-height: 100vh;
+}
+
+.container {
+    width: 90%;
+    max-width: 480px;
+    margin: auto;
+    padding-top: 40px;
+}
+
+button {
+    cursor: pointer;
+    border: none;
+    background: none;
+}
+
+input {
+    width: 100%;
+    padding: 12px;
+    margin-bottom: 16px;
+    border: 1px solid var(--gray);
+    border-radius: 8px;
+    font-size: 16px;
+}
+
+.btn-primary {
+    width: 100%;
+    padding: 14px;
+    background: var(--blue);
+    color: var(--white);
+    font-size: 18px;
+    border-radius: 8px;
+    transition: 0.2s;
+}
+
+.btn-primary:hover {
+    background: var(--blue-dark);
+}
+
+h1, h2 {
+    text-align: center;
+    margin-bottom: 20px;
+}
+
+.card {
+    background: var(--white);
+    padding: 32px;
+    border-radius: 16px;
+    box-shadow: 0px 6px 18px rgba(0,0,0,0.1);
+}
+
+.page-icon {
+    width: 240px;
+    height: auto;
+}
+
+@media(max-width: 500px) {
+    .container {
+        padding-top: 20px;
+    }
+}

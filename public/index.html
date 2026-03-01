@@ -1,0 +1,38 @@
+<link rel="manifest" href="/public/manifest.json">
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Phonambula — Главная</title>
+    <link rel="stylesheet" href="css/common.css">
+</head>
+<body>
+    <div class="container">
+        <div style="text-align:center; margin-bottom:40px;">
+            <img src="icons/icon_page.png" alt="Phonambula" class="page-icon">
+        </div>
+
+        <h1>Добро пожаловать в Phonambula</h1>
+        <p style="text-align:center; color: var(--gray); margin-bottom:30px;">
+            Современное приложение для быстрого поиска контактных данных сотрудников!.
+        </p>
+
+        <div style="display:flex; gap:12px; flex-direction:column;">
+            <a href="login.html">
+                <button class="btn-primary">Войти</button>
+            </a>
+            <a href="register.html">
+                <button class="btn-primary" style="background: #FFFFFF; border:1px solid var(--blue); color:var(--blue);">
+                    Регистрация
+                </button>
+            </a>
+        </div>
+    </div>
+</body>
+</html>
+<script>
+if ('serviceWorker' in navigator) {
+  navigator.serviceWorker.register('/service-worker.js');
+}
+</script>

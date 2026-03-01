@@ -1,0 +1,53 @@
+name: CI - Build & Test
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          java-version: '17'
+          distribution: 'temurin'
+          cache: maven
+
+      # 3. Собираем Maven проект (clean + compile + test + package)
+      - name: Build with Maven
+        working-directory: ./server
+        run: mvn -B clean verify
+
+      - name: Build Docker image
+        working-directory: ./server
+        run: |
+          pwd                          # покажет текущую директорию
+          ls -la                       # список всех файлов (должен показать Dockerfile, mvnw, pom.xml и т.д.)
+          ls -la .mvn/ || echo ".mvn not found"
+          ls -la target/ || echo "target not found yet"
+          file mvnw                    # проверит, executable ли
+          chmod +x mvnw || true        # сделаем executable на всякий
+          docker build -t phonambula-backend:latest --no-cache .
+
+      # залогиниться в Docker Hub и запушить образ
+      # - name: Login to Docker Hub
+      #   if: github.ref == 'refs/heads/main'
+      #   uses: docker/login-action@v3
+      #   with:
+      #     username: ${{ secrets.DOCKER_USERNAME }}
+      #     password: ${{ secrets.DOCKER_PASSWORD }}
+      #
+      # - name: Push Docker image
+      #   if: github.ref == 'refs/heads/main'
+      #   working-directory: ./server
+      #   run: |
+      #     docker tag phonambula-backend:latest ${{ secrets.DOCKER_USERNAME }}/phonambula-backend:latest
+      #     docker push ${{ secrets.DOCKER_USERNAME }}/phonambula-backend:latest
