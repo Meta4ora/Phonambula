@@ -1,0 +1,381 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Phonambula — Контакты</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        @font-face {
+            font-family: 'BeerMoney';
+            src: url('fonts/beermoney.ttf') format('truetype');
+            font-weight: normal;
+            font-style: normal;
+            font-display: swap;
+        }
+
+        body {
+            font-family: 'BeerMoney', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: url('icons/background.png') no-repeat center center fixed;
+            background-size: cover;
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+        }
+
+        /* Иконка в левом верхнем углу */
+        .page-icon {
+            position: absolute;
+            top: 20px;
+            left: 20px;
+            width: 80px;
+            height: 80px;
+            border-radius: 50%;
+            box-shadow: 0 10px 25px rgba(0,0,0,0.2);
+            z-index: 10;
+            border: 3px solid rgba(255,255,255,0.5);
+            cursor: pointer;
+            transition: transform 0.3s;
+        }
+
+        .page-icon:hover {
+            transform: scale(1.05);
+        }
+
+        /* Основной контейнер с двумя панелями */
+        .contacts-container {
+            width: 100%;
+            max-width: 1200px;
+            height: 80vh;
+            display: flex;
+            gap: 20px;
+            background: rgba(151, 218, 245, 0.8);
+            backdrop-filter: blur(10px);
+            border-radius: 32px;
+            padding: 20px;
+            box-shadow: 0 20px 40px -10px rgba(0, 0, 0, 0.3);
+            border: 1px solid rgba(255,255,255,0.5);
+        }
+
+        /* Левая панель со списком контактов */
+        .contacts-sidebar {
+            width: 35%;
+            background: rgba(255, 255, 255, 0.3);
+            border-radius: 24px;
+            padding: 20px;
+            overflow-y: auto;
+            border: 1px solid rgba(255,255,255,0.5);
+        }
+
+        .contacts-sidebar h3 {
+            font-size: 1.8rem;
+            color: #4D3F8D;
+            margin-bottom: 20px;
+            padding-bottom: 10px;
+            border-bottom: 2px solid rgba(77, 63, 141, 0.3);
+        }
+
+        /* Древовидная структура контактов */
+        .contact-tree {
+            list-style: none;
+        }
+
+        .contact-tree li {
+            margin-bottom: 8px;
+        }
+
+        .contact-tree .category {
+            font-size: 1.4rem;
+            color: #4D3F8D;
+            font-weight: 600;
+            margin: 15px 0 10px;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .contact-tree .category::before {
+            content: '▶';
+            font-size: 1rem;
+            transition: transform 0.3s;
+        }
+
+        .contact-tree .category.expanded::before {
+            transform: rotate(90deg);
+        }
+
+        .contact-tree .sub-list {
+            list-style: none;
+            margin-left: 25px;
+            display: none;
+        }
+
+        .contact-tree .category.expanded + .sub-list {
+            display: block;
+        }
+
+        .contact-item {
+            padding: 12px 15px;
+            margin: 5px 0;
+            background: rgba(255, 255, 255, 0.5);
+            border-radius: 16px;
+            cursor: pointer;
+            transition: all 0.3s;
+            font-size: 1.2rem;
+            color: #4D3F8D;
+            border: 1px solid transparent;
+        }
+
+        .contact-item:hover {
+            background: rgba(255, 255, 255, 0.8);
+            transform: translateX(5px);
+            border-color: #4D3F8D;
+        }
+
+        .contact-item.active {
+            background: #4D3F8D;
+            color: white;
+        }
+
+        /* Правая панель с деталями контакта */
+        .contact-details {
+            width: 65%;
+            background: rgba(255, 255, 255, 0.5);
+            backdrop-filter: blur(5px);
+            border-radius: 24px;
+            padding: 30px;
+            overflow-y: auto;
+            border: 1px solid rgba(255,255,255,0.5);
+        }
+
+        .contact-details h2 {
+            font-size: 2.5rem;
+            color: #4D3F8D;
+            margin-bottom: 30px;
+            padding-bottom: 15px;
+            border-bottom: 2px solid rgba(77, 63, 141, 0.3);
+        }
+
+        .detail-section {
+            margin-bottom: 30px;
+        }
+
+        .detail-section h4 {
+            font-size: 1.4rem;
+            color: #4D3F8D;
+            margin-bottom: 15px;
+            opacity: 0.8;
+            text-transform: lowercase;
+        }
+
+        .detail-item {
+            background: rgba(255, 255, 255, 0.7);
+            border-radius: 16px;
+            padding: 20px;
+            margin-bottom: 15px;
+            border: 1px solid rgba(77, 63, 141, 0.2);
+        }
+
+        .detail-label {
+            font-size: 1.1rem;
+            color: #4D3F8D;
+            opacity: 0.7;
+            margin-bottom: 8px;
+            text-transform: lowercase;
+        }
+
+        .detail-value {
+            font-size: 1.8rem;
+            color: #4D3F8D;
+            font-weight: 600;
+            word-break: break-word;
+        }
+
+        .detail-value.small {
+            font-size: 1.4rem;
+        }
+
+        /* Адаптация для мобильных */
+        @media (max-width: 768px) {
+            .contacts-container {
+                flex-direction: column;
+                height: auto;
+            }
+
+            .contacts-sidebar, .contact-details {
+                width: 100%;
+            }
+
+            .page-icon {
+                width: 60px;
+                height: 60px;
+                top: 10px;
+                left: 10px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <!-- Иконка приложения -->
+    <img src="icons/icon_page.png" alt="Phonambula" class="page-icon" onclick="window.location.href='index.html'">
+
+    <div class="contacts-container">
+        <!-- Левая панель со списком контактов -->
+        <div class="contacts-sidebar">
+            <h3>Контакты</h3>
+            <ul class="contact-tree">
+                <li>
+                    <div class="category expanded" onclick="toggleCategory(this)">Вы</div>
+                    <ul class="sub-list">
+                        <li class="contact-item active" onclick="selectContact(this, 'self')">Петров Петр Петрович</li>
+                    </ul>
+                </li>
+                
+                <li>
+                    <div class="category expanded" onclick="toggleCategory(this)">Избранное</div>
+                    <ul class="sub-list">
+                        <li class="contact-item" onclick="selectContact(this, 'favorite')">Рината Абдурахманова</li>
+                    </ul>
+                </li>
+                
+                <li>
+                    <div class="category expanded" onclick="toggleCategory(this)">А</div>
+                    <ul class="sub-list">
+                        <li class="contact-item" onclick="selectContact(this, 'abu')">Абу Калисстский</li>
+                        <li class="contact-item" onclick="selectContact(this, 'abdur')">Абдурахмед Ашотович</li>
+                    </ul>
+                </li>
+            </ul>
+        </div>
+
+        <!-- Правая панель с деталями контакта -->
+        <div class="contact-details" id="contactDetails">
+            <!-- Данные будут обновляться через JavaScript -->
+        </div>
+    </div>
+
+    <script>
+        // Данные контактов
+        const contactsData = {
+            self: {
+                name: 'Петров Петр Петрович',
+                phone: '89812345678',
+                cityPhone: '89812345678',
+                email: 'gycgdu@hsudh.com',
+                position: 'СММ специалист',
+                department: 'Отдел АСУП',
+                building: '4',
+                cabinet: '123'
+            },
+            favorite: {
+                name: 'Рината Абдурахманова',
+                phone: '89812345678',
+                cityPhone: '89812345678',
+                email: 'rinata@company.ru',
+                position: 'Главный бухгалтер',
+                department: 'Бухгалтерия',
+                building: '2',
+                cabinet: '45'
+            },
+            abu: {
+                name: 'Абу Калисстский',
+                phone: '89812345678',
+                cityPhone: '89812345678',
+                email: 'abu@company.ru',
+                position: 'Специалист',
+                department: 'Технический отдел',
+                building: '3',
+                cabinet: '78'
+            },
+            abdur: {
+                name: 'Абдурахмед Ашотович',
+                phone: '89812345678',
+                cityPhone: '89812345678',
+                email: 'abdu@company.ru',
+                position: 'Менеджер',
+                department: 'Отдел продаж',
+                building: '1',
+                cabinet: '12'
+            }
+        };
+
+        // Функция для сворачивания/разворачивания категорий
+        function toggleCategory(element) {
+            element.classList.toggle('expanded');
+        }
+
+        // Функция для выбора контакта
+        function selectContact(element, contactId) {
+            // Убираем активный класс у всех контактов
+            document.querySelectorAll('.contact-item').forEach(item => {
+                item.classList.remove('active');
+            });
+            
+            // Добавляем активный класс выбранному контакту
+            element.classList.add('active');
+            
+            // Отображаем детали контакта
+            showContactDetails(contactId);
+        }
+
+        // Функция для отображения деталей контакта
+        function showContactDetails(contactId) {
+            const contact = contactsData[contactId];
+            const detailsDiv = document.getElementById('contactDetails');
+            
+            detailsDiv.innerHTML = `
+                <h2>${contact.name}</h2>
+                
+                <div class="detail-section">
+                    <h4>Контактные данные</h4>
+                    <div class="detail-item">
+                        <div class="detail-label">Номер телефона</div>
+                        <div class="detail-value">${contact.phone}</div>
+                    </div>
+                    <div class="detail-item">
+                        <div class="detail-label">Городской телефон</div>
+                        <div class="detail-value">${contact.cityPhone}</div>
+                    </div>
+                    <div class="detail-item">
+                        <div class="detail-label">Адрес электронной почты</div>
+                        <div class="detail-value">${contact.email}</div>
+                    </div>
+                </div>
+                
+                <div class="detail-section">
+                    <h4>Информация</h4>
+                    <div class="detail-item">
+                        <div class="detail-label">Должность</div>
+                        <div class="detail-value small">${contact.position}</div>
+                    </div>
+                    <div class="detail-item">
+                        <div class="detail-label">Подразделение</div>
+                        <div class="detail-value small">${contact.department}</div>
+                    </div>
+                    <div class="detail-item">
+                        <div class="detail-label">Корпус</div>
+                        <div class="detail-value small">${contact.building}</div>
+                    </div>
+                    <div class="detail-item">
+                        <div class="detail-label">Номер кабинета</div>
+                        <div class="detail-value small">${contact.cabinet}</div>
+                    </div>
+                </div>
+            `;
+        }
+
+        // При загрузке страницы показываем первый контакт
+        window.addEventListener('DOMContentLoaded', () => {
+            showContactDetails('self');
+        });
+    </script>
+</body>
+</html>
