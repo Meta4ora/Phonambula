@@ -17,11 +17,11 @@ jobs:
           - 58080:58080
 
     steps:
-      # 1. Получаем код
+      # 1 Получаем код
       - name: Checkout code
         uses: actions/checkout@v4
 
-      # 2. Настраиваем JDK 17
+      # 2 Настраиваем JDK 17
       - name: Set up JDK 17
         uses: actions/setup-java@v4
         with:
@@ -29,12 +29,12 @@ jobs:
           distribution: 'temurin'
           cache: maven
 
-      # 3. Сборка Maven проекта
+      # 3 Сборка Maven проекта
       - name: Build Maven project
         working-directory: ./server
         run: mvn -B clean verify
 
-      # 4. Сборка Docker образа
+      # 4 Сборка Docker образа
       - name: Build Docker image
         working-directory: ./server
         run: |
@@ -50,13 +50,13 @@ jobs:
           echo "Backend running on port $HOST_PORT"
           sleep 20
 
-      # 6. Ждём, чтобы сервис поднялся
+      # 6 Ждём, чтобы сервис поднялся
       - name: Wait for backend
         run: |
           echo "Waiting 20s for backend to start..."
           sleep 20
 
-      # 7. Тестируем /api/users
+      # 7 Тестируем /api/users
       - name: Test GET /api/users
         run: |
           RESPONSE=$(curl -s http://localhost:$HOST_PORT/api/users)
@@ -68,7 +68,7 @@ jobs:
             exit 1
           fi
 
-      # 8. Тестируем /api/roles
+      # 8 Тестируем /api/roles
       - name: Test GET /api/roles
         run: |
           RESPONSE=$(curl -s http://localhost:$HOST_PORT/api/roles)
@@ -80,6 +80,6 @@ jobs:
             exit 1
           fi
 
-      # 9. Останавливаем контейнер после тестов
+      # 9 Останавливаем контейнер после тестов
       - name: Stop backend container
         run: docker stop phonambula-backend && docker rm phonambula-backend
