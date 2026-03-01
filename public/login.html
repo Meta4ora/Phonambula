@@ -122,7 +122,18 @@
       transition: 0.2s;
       box-shadow: 0 2px 6px rgba(0,0,0,0.02);
     }
-
+ .page-icon {
+      position: absolute;
+      top: 20px;
+      left: 20px;
+      width: 80px;
+      height: 80px;
+      border-radius: 50%;
+      box-shadow: 0 10px 25px rgba(0,0,0,0.2);
+      z-index: 10;
+      border: 3px solid rgba(255,255,255,0.5);
+      transition: transform 0.3s;
+    }
     .input-field input:focus {
       border-color: #3478f6;
       background: white;
@@ -219,6 +230,8 @@
   </style>
 </head>
 <body>
+    <!-- Иконка как на главной странице -->
+        <img src="icons/icon_page.png" alt="Phonambula" class="page-icon">
   <div class="cards-container">
     <!-- Карточка входа -->
     <div class="login-card active" id="loginCard">
@@ -270,59 +283,59 @@
   </div>
 
   <script>
-    // Функция для переключения на регистрацию
+    // Ваши существующие функции switchToRegister и switchToLogin
     function switchToRegister() {
       const loginCard = document.getElementById('loginCard');
       const registerCard = document.getElementById('registerCard');
-      
-      // Убираем активный класс у входа
+
       loginCard.classList.remove('active');
       loginCard.classList.add('exit-left');
-      
-      // Показываем регистрацию
+
       registerCard.classList.remove('exit-left', 'enter-right');
       registerCard.classList.add('active');
-      
-      // Убираем лишние классы после анимации
+
       setTimeout(() => {
         loginCard.classList.remove('exit-left');
         loginCard.classList.add('enter-right');
       }, 500);
+      
+      // Обновляем URL без перезагрузки страницы
+      history.pushState({}, '', '?form=register');
     }
-
-    // Функция для переключения на вход
-    function switchToLogin() {
+function switchToLogin() {
       const loginCard = document.getElementById('loginCard');
       const registerCard = document.getElementById('registerCard');
-      
-      // Убираем активный класс у регистрации
+
       registerCard.classList.remove('active');
       registerCard.classList.add('exit-left');
-      
-      // Показываем вход
+    
       loginCard.classList.remove('enter-right', 'exit-left');
-      loginCard.classList.add('active');
-      
-      // Убираем лишние классы после анимации
+      loginCard.classList.add('active');      
       setTimeout(() => {
         registerCard.classList.remove('exit-left');
         registerCard.classList.add('enter-right');
       }, 500);
-    }
-
-    // Функция для переключения туда-сюда (для кнопки)
-    function toggleCards() {
-      const loginCard = document.getElementById('loginCard');
-      const registerCard = document.getElementById('registerCard');
       
-      if (loginCard.classList.contains('active')) {
-        switchToRegister();
-      } else {
-        switchToLogin();
-      }
+      // Обновляем URL без перезагрузки страницы
+      history.pushState({}, '', window.location.pathname);
     }
 
-    // Предотвращаем переход по ссылке
+    // Проверяем параметры URL при загрузке
+    window.addEventListener('DOMContentLoaded', function() {
+      const urlParams = new URLSearchParams(window.location.search);
+      const form = urlParams.get('form');
+      
+      if (form === 'register') {
+        // Если нужно открыть регистрацию
+        const loginCard = document.getElementById('loginCard');
+        const registerCard = document.getElementById('registerCard');
+        
+        loginCard.classList.remove('active');
+        registerCard.classList.add('active');
+      }
+    });
+
+    // Предотвращаем переход по ссылкам
     document.querySelectorAll('.signup-prompt a, .login-prompt a').forEach(link => {
       link.addEventListener('click', (e) => {
         e.preventDefault();
