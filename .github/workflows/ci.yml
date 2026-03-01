@@ -36,6 +36,27 @@ jobs:
           file mvnw                    # проверит, executable ли
           chmod +x mvnw || true        # сделаем executable на всякий
           docker build -t phonambula-backend:latest --no-cache .
+      - name: Run backend in background
+        working-directory: ./server
+        run: |
+          nohup java -jar target/server-0.0.1-SNAPSHOT.jar > backend.log 2>&1 &
+          echo "Backend started"
+      - name: Wait for backend to start
+        run: sleep 15
+      - name: Test GET /api/users
+        run: |
+          RESPONSE=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:58080/api/users)
+          if [ "$RESPONSE" -ne 200 ]; then
+            echo "Users API failed with $RESPONSE"
+            exit 1
+          fi
+      - name: Test GET /api/roles
+        run: |
+          RESPONSE=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:58080/api/roles)
+          if [ "$RESPONSE" -ne 200 ]; then
+            echo "Roles API failed with $RESPONSE"
+            exit 1
+          fi
 
       # залогиниться в Docker Hub и запушить образ
       # - name: Login to Docker Hub
