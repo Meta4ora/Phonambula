@@ -28,7 +28,14 @@ jobs:
 
       - name: Build Docker image
         working-directory: ./server
-        run: docker build -t phonambula-backend:latest .
+        run: |
+          pwd                          # покажет текущую директорию
+          ls -la                       # список всех файлов (должен показать Dockerfile, mvnw, pom.xml и т.д.)
+          ls -la .mvn/ || echo ".mvn not found"
+          ls -la target/ || echo "target not found yet"
+          file mvnw                    # проверит, executable ли
+          chmod +x mvnw || true        # сделаем executable на всякий
+          docker build -t phonambula-backend:latest --no-cache .
 
       # залогиниться в Docker Hub и запушить образ
       # - name: Login to Docker Hub
