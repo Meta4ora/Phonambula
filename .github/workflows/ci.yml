@@ -59,14 +59,13 @@ jobs:
       # 7. Тестируем /api/users
       - name: Test GET /api/users
         run: |
-          echo "Using port $HOST_PORT"
-          RESPONSE=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:$HOST_PORT/api/users)
-          if [ "$RESPONSE" -ne 200 ]; then
-            echo "Users API failed with HTTP code $RESPONSE"
-            docker logs phonambula-backend
+          RESPONSE=$(curl -s http://localhost:$HOST_PORT/api/users)
+          echo "Ответ Users API:"
+          echo "$RESPONSE"
+          HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:$HOST_PORT/api/users)
+          if [ "$HTTP_CODE" -ne 200 ]; then
+            echo "Users API failed with HTTP code $HTTP_CODE"
             exit 1
-          else
-            echo "Users API OK"
           fi
 
       # 8. Тестируем /api/roles
