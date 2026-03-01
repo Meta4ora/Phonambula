@@ -3,10 +3,12 @@ package com.example.server.controller;
 import com.example.server.model.Subscriber;
 import com.example.server.service.SubscriberService;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
+import java.time.LocalDate;
 import java.util.List;
 
 @RestController
@@ -34,10 +36,43 @@ public class SubscriberController {
                 .orElse(new ResponseEntity<>(HttpStatus.NOT_FOUND));
     }
 
+    @PostMapping("/create-simple")
+    public ResponseEntity<Subscriber> createSubscriberSimple(
+            @RequestParam Long userId,
+            @RequestParam Integer postId,
+            @RequestParam Integer divisionId,
+            @RequestParam Integer buildingId,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate dateBirth,
+            @RequestParam(required = false) String cabinetNumber,
+            @RequestParam(required = false) String internalPhoneNumber,
+            @RequestParam(required = false) String landlinePhoneNumber,
+            @RequestParam(required = false) String mobilePhoneNumber) {
+
+        // Валидация обязательных полей (все ID обязательны)
+        if (userId == null || postId == null || divisionId == null || buildingId == null) {
+            return new ResponseEntity<>(HttpStatus.BAD_REQUEST);
+        }
+
+        try {
+            Subscriber createdSubscriber = subscriberService.createSubscriber(
+                    userId, postId, divisionId, buildingId,
+                    dateBirth, cabinetNumber, internalPhoneNumber,
+                    landlinePhoneNumber, mobilePhoneNumber
+            );
+            return new ResponseEntity<>(createdSubscriber, HttpStatus.CREATED);
+        } catch (RuntimeException e) {
+            return new ResponseEntity(e.getMessage(), HttpStatus.BAD_REQUEST);
+        }
+    }
+
     @PostMapping
     public ResponseEntity<Subscriber> createSubscriber(@RequestBody Subscriber subscriber) {
-        Subscriber savedSubscriber = subscriberService.save(subscriber);
-        return new ResponseEntity<>(savedSubscriber, HttpStatus.CREATED);
+        try {
+            Subscriber savedSubscriber = subscriberService.save(subscriber);
+            return new ResponseEntity<>(savedSubscriber, HttpStatus.CREATED);
+        } catch (Exception e) {
+            return new ResponseEntity<>(HttpStatus.BAD_REQUEST);
+        }
     }
 
     @PutMapping("/{id}")
@@ -45,8 +80,12 @@ public class SubscriberController {
         if (!subscriberService.findById(id).isPresent()) {
             return new ResponseEntity<>(HttpStatus.NOT_FOUND);
         }
-        Subscriber updatedSubscriber = subscriberService.update(id, subscriber);
-        return new ResponseEntity<>(updatedSubscriber, HttpStatus.OK);
+        try {
+            Subscriber updatedSubscriber = subscriberService.update(id, subscriber);
+            return new ResponseEntity<>(updatedSubscriber, HttpStatus.OK);
+        } catch (RuntimeException e) {
+            return new ResponseEntity(e.getMessage(), HttpStatus.BAD_REQUEST);
+        }
     }
 
     @DeleteMapping("/{id}")
@@ -58,27 +97,9 @@ public class SubscriberController {
         return new ResponseEntity<>(HttpStatus.NO_CONTENT);
     }
 
-    @GetMapping("/building/{buildingId}")
-    public ResponseEntity<List<Subscriber>> getSubscribersByBuilding(@PathVariable Integer buildingId) {
-        List<Subscriber> subscribers = subscriberService.findByBuildingId(buildingId);
-        return new ResponseEntity<>(subscribers, HttpStatus.OK);
-    }
-
-    @GetMapping("/division/{divisionId}")
-    public ResponseEntity<List<Subscriber>> getSubscribersByDivision(@PathVariable Integer divisionId) {
-        List<Subscriber> subscribers = subscriberService.findByDivisionId(divisionId);
-        return new ResponseEntity<>(subscribers, HttpStatus.OK);
-    }
-
-    @GetMapping("/post/{postId}")
-    public ResponseEntity<List<Subscriber>> getSubscribersByPost(@PathVariable Integer postId) {
-        List<Subscriber> subscribers = subscriberService.findByPostId(postId);
-        return new ResponseEntity<>(subscribers, HttpStatus.OK);
-    }
-
-    @GetMapping("/search")
-    public ResponseEntity<List<Subscriber>> searchSubscribers(@RequestParam(required = false) String q) {
-        List<Subscriber> subscribers = subscriberService.search(q);
+    @GetMapping("/user/{userId}")
+    public ResponseEntity<List<Subscriber>> getSubscribersByUser(@PathVariable Long userId) {
+        List<Subscriber> subscribers = subscriberService.findByUserId(userId);
         return new ResponseEntity<>(subscribers, HttpStatus.OK);
     }
 }

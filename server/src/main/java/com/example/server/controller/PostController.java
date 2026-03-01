@@ -1,6 +1,7 @@
 package com.example.server.controller;
 
 import com.example.server.model.Post;
+import com.example.server.model.Role;
 import com.example.server.service.PostService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
@@ -43,14 +44,6 @@ public class PostController {
         Post createdPost = postService.createPost(namePost);
         return new ResponseEntity<>(createdPost, HttpStatus.CREATED);
     }
-
-    @PostMapping
-    public ResponseEntity<Post> createPost(@RequestBody Post post) {
-        post.setId(null);
-        Post savedPost = postService.save(post);
-        return new ResponseEntity<>(savedPost, HttpStatus.CREATED);
-    }
-
     @PutMapping("/{id}")
     public ResponseEntity<Post> updatePost(@PathVariable Integer id, @RequestBody Post post) {
         if (!postService.findById(id).isPresent()) {

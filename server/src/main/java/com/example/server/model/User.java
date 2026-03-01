@@ -25,24 +25,23 @@ public class User {
     private String login;
 
     @Column(name = "\"Password\"", nullable = false, length = Integer.MAX_VALUE)
+    @JsonIgnore // Не возвращаем пароль в JSON ответах
     private String password;
 
-    @ManyToOne(fetch = FetchType.LAZY)
+    @ManyToOne(fetch = FetchType.EAGER) // EAGER чтобы роль загружалась сразу
     @JoinColumn(name = "id_role")
-    @JsonIgnore
     private Role idRole;
 
     // Пустой конструктор
     public User() {
     }
 
-    // Конструктор для создания пользователя
-    public User(String surname, String name, String patronymic, String login, String password, Role role) {
+    // Конструктор для создания пользователя (без ID и без пароля - установим отдельно)
+    public User(String surname, String name, String patronymic, String login, Role role) {
         this.surname = surname;
         this.name = name;
         this.patronymic = patronymic;
         this.login = login;
-        this.password = password;
         this.idRole = role;
     }
 

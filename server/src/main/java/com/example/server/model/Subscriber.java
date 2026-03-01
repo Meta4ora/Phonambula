@@ -11,19 +11,19 @@ public class Subscriber {
     @Column(name = "id_subscriber", nullable = false)
     private Long id;
 
-    @ManyToOne(fetch = FetchType.LAZY)
+    @ManyToOne(fetch = FetchType.EAGER)
     @JoinColumn(name = "id_user", nullable = false)
     private User idUser;
 
-    @ManyToOne(fetch = FetchType.LAZY)
+    @ManyToOne(fetch = FetchType.EAGER)
     @JoinColumn(name = "id_post", nullable = false)
     private Post idPost;
 
-    @ManyToOne(fetch = FetchType.LAZY)
+    @ManyToOne(fetch = FetchType.EAGER)
     @JoinColumn(name = "id_division", nullable = false)
     private Division idDivision;
 
-    @ManyToOne(fetch = FetchType.LAZY)
+    @ManyToOne(fetch = FetchType.EAGER)
     @JoinColumn(name = "id_building", nullable = false)
     private Building idBuilding;
 
@@ -42,7 +42,6 @@ public class Subscriber {
     @Column(name = "mobile_phone_number", length = Integer.MAX_VALUE)
     private String mobilePhoneNumber;
 
-    // Пустой конструктор
     public Subscriber() {
     }
 
@@ -61,7 +60,6 @@ public class Subscriber {
         this.mobilePhoneNumber = mobilePhoneNumber;
     }
 
-    // Геттеры и сеттеры
     public Long getId() {
         return id;
     }
