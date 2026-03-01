@@ -156,4 +156,27 @@ public class UserController {
                 })
                 .orElse(new ResponseEntity<>(HttpStatus.NOT_FOUND));
     }
+
+    @PostMapping("/check-login")
+    public ResponseEntity<?> checkLogin(@RequestBody Map<String, String> credentials) {
+        try {
+            String login = credentials.get("login");
+            String password = credentials.get("password");
+
+            if (login == null || login.trim().isEmpty() ||
+                    password == null || password.trim().isEmpty()) {
+                return new ResponseEntity<>("Логин и пароль обязательны", HttpStatus.BAD_REQUEST);
+            }
+
+            boolean exists = userService.checkUserExists(login, password);
+
+            if (exists) {
+                return new ResponseEntity<>(Map.of("exists", true), HttpStatus.OK);
+            } else {
+                return new ResponseEntity<>(Map.of("exists", false), HttpStatus.OK);
+            }
+        } catch (Exception e) {
+            return new ResponseEntity<>(HttpStatus.INTERNAL_SERVER_ERROR);
+        }
+    }
 }
