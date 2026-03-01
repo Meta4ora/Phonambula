@@ -9,6 +9,7 @@ import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 
 @RestController
 @RequestMapping("/api/users")
@@ -25,50 +26,100 @@ public class UserController {
     @GetMapping
     public ResponseEntity<List<User>> getAllUsers() {
         List<User> users = userService.findAll();
+        // Убираем пароли из ответа для безопасности
+        users.forEach(user -> user.setPassword(null));
         return new ResponseEntity<>(users, HttpStatus.OK);
     }
 
     @GetMapping("/{id}")
     public ResponseEntity<User> getUserById(@PathVariable Long id) {
         return userService.findById(id)
-                .map(user -> new ResponseEntity<>(user, HttpStatus.OK))
+                .map(user -> {
+                    user.setPassword(null); // Не возвращаем пароль
+                    return new ResponseEntity<>(user, HttpStatus.OK);
+                })
                 .orElse(new ResponseEntity<>(HttpStatus.NOT_FOUND));
     }
 
-    @PostMapping("/create")
-    public ResponseEntity<User> createUser(@RequestBody Map<String, Object> request) {
-        try {
-            String surname = (String) request.get("surname");
-            String name = (String) request.get("name");
-            String patronymic = (String) request.get("patronymic");
-            String login = (String) request.get("login");
-            String password = (String) request.get("password");
-            Integer roleId = (Integer) request.get("roleId");
+    @PostMapping("/create-simple")
+    public ResponseEntity<User> createUserSimple(
+            @RequestParam String surname,
+            @RequestParam String name,
+            @RequestParam(required = false) String patronymic,
+            @RequestParam String login,
+            @RequestParam String password,
+            @RequestParam Integer roleId) {
 
-            // Проверка обязательных полей
-            if (surname == null || name == null || login == null ||
-                    password == null || roleId == null) {
-                return new ResponseEntity<>(HttpStatus.BAD_REQUEST);
+        // Валидация обязательных полей
+        if (surname == null || surname.trim().isEmpty() ||
+                name == null || name.trim().isEmpty() ||
+                login == null || login.trim().isEmpty() ||
+                password == null || password.trim().isEmpty() ||
+                roleId == null) {
+            return new ResponseEntity<>(HttpStatus.BAD_REQUEST);
+        }
+
+        try {
+            // Если patronymic не передан, используем пустую строку или null
+            if (patronymic == null) {
+                patronymic = "";
             }
 
             User createdUser = userService.createUser(
                     surname, name, patronymic, login, password, roleId
             );
 
+            createdUser.setPassword(null); // Не возвращаем пароль
             return new ResponseEntity<>(createdUser, HttpStatus.CREATED);
-        } catch (Exception e) {
-            return new ResponseEntity<>(HttpStatus.BAD_REQUEST);
+        } catch (RuntimeException e) {
+            // Логируем ошибку и возвращаем BAD_REQUEST с сообщением
+            return new ResponseEntity(e.getMessage(), HttpStatus.BAD_REQUEST);
         }
     }
 
     @PostMapping
-    public ResponseEntity<User> createUserFull(@RequestBody User user) {
+    public ResponseEntity<User> createUser(@RequestBody Map<String, Object> payload) {
         try {
-            // Убеждаемся, что ID не передается
-            user.setId(null);
-            User savedUser = userService.save(user);
-            return new ResponseEntity<>(savedUser, HttpStatus.CREATED);
+            // Извлекаем все поля из JSON
+            String surname = (String) payload.get("surname");
+            String name = (String) payload.get("name");
+            String patronymic = (String) payload.get("patronymic");
+            String login = (String) payload.get("login");
+            String password = (String) payload.get("password");
+
+            // ИЗВЛЕКАЕМ ID ИЗ ВЛОЖЕННОГО ОБЪЕКТА idRole
+            Map<String, Object> idRole = (Map<String, Object>) payload.get("idRole");
+            Integer roleId = null;
+            if (idRole != null) {
+                roleId = (Integer) idRole.get("id");
+            }
+
+            // Валидация
+            if (surname == null || surname.trim().isEmpty() ||
+                    name == null || name.trim().isEmpty() ||
+                    login == null || login.trim().isEmpty() ||
+                    password == null || password.trim().isEmpty() ||
+                    roleId == null) {
+
+                return new ResponseEntity<>(HttpStatus.BAD_REQUEST);
+            }
+
+            if (patronymic == null) {
+                patronymic = "";
+            }
+
+            // Создаем пользователя через сервис (пароль захешируется)
+            User createdUser = userService.createUser(
+                    surname, name, patronymic, login, password, roleId
+            );
+
+            createdUser.setPassword(null);
+            return new ResponseEntity<>(createdUser, HttpStatus.CREATED);
+
+        } catch (RuntimeException e) {
+            return new ResponseEntity(e.getMessage(), HttpStatus.BAD_REQUEST);
         } catch (Exception e) {
+            e.printStackTrace();
             return new ResponseEntity<>(HttpStatus.BAD_REQUEST);
         }
     }
@@ -78,8 +129,13 @@ public class UserController {
         if (!userService.findById(id).isPresent()) {
             return new ResponseEntity<>(HttpStatus.NOT_FOUND);
         }
-        User updatedUser = userService.update(id, user);
-        return new ResponseEntity<>(updatedUser, HttpStatus.OK);
+        try {
+            User updatedUser = userService.update(id, user);
+            updatedUser.setPassword(null); // Не возвращаем пароль
+            return new ResponseEntity<>(updatedUser, HttpStatus.OK);
+        } catch (RuntimeException e) {
+            return new ResponseEntity(e.getMessage(), HttpStatus.BAD_REQUEST);
+        }
     }
 
     @DeleteMapping("/{id}")
@@ -89,5 +145,15 @@ public class UserController {
         }
         userService.deleteById(id);
         return new ResponseEntity<>(HttpStatus.NO_CONTENT);
+    }
+
+    @GetMapping("/by-login/{login}")
+    public ResponseEntity<User> getUserByLogin(@PathVariable String login) {
+        return userService.findByLogin(login)
+                .map(user -> {
+                    user.setPassword(null);
+                    return new ResponseEntity<>(user, HttpStatus.OK);
+                })
+                .orElse(new ResponseEntity<>(HttpStatus.NOT_FOUND));
     }
 }
