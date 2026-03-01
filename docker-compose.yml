@@ -1,0 +1,39 @@
+version: "3.9"
+
+services:
+  db:
+    image: postgres:15
+    container_name: phonambula-db
+    environment:
+      POSTGRES_DB: phonambula
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+    ports:
+      - "55432:5432"
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+
+  backend:
+    build: ./server
+    container_name: phonambula-backend
+    ports:
+      - "58080:8080"
+    depends_on:
+      - db
+    environment:
+      SPRING_DATASOURCE_URL: jdbc:postgresql://db:5432/phonambula
+      SPRING_DATASOURCE_USERNAME: postgres
+      SPRING_DATASOURCE_PASSWORD: postgres
+      SPRING_JPA_HIBERNATE_DDL_AUTO: update
+      SPRING_JPA_SHOW_SQL: true
+
+  frontend:
+    build: ./public
+    container_name: phonambula-frontend
+    ports:
+      - "53000:80"
+    depends_on:
+      - backend
+
+volumes:
+  postgres-data:
