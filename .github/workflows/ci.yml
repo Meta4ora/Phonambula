@@ -5,15 +5,18 @@ on:
     branches: [ main ]
   pull_request:
     branches: [ main ]
+  workflow_dispatch:  # позволит запускать вручную
 
 jobs:
   build:
     runs-on: ubuntu-latest
 
     steps:
+      # 1. Получаем код
       - name: Checkout code
         uses: actions/checkout@v4
 
+      # 2. Устанавливаем JDK 17
       - name: Set up JDK 17
         uses: actions/setup-java@v4
         with:
@@ -21,54 +24,50 @@ jobs:
           distribution: 'temurin'
           cache: maven
 
-      # 3. Собираем Maven проект (clean + compile + test + package)
+      # 3. Собираем Maven проект
       - name: Build with Maven
         working-directory: ./server
         run: mvn -B clean verify
 
+      # 4. Собираем Docker образ (если нужен)
       - name: Build Docker image
         working-directory: ./server
-        run: |
-          pwd                          # покажет текущую директорию
-          ls -la                       # список всех файлов (должен показать Dockerfile, mvnw, pom.xml и т.д.)
-          ls -la .mvn/ || echo ".mvn not found"
-          ls -la target/ || echo "target not found yet"
-          file mvnw                    # проверит, executable ли
-          chmod +x mvnw || true        # сделаем executable на всякий
-          docker build -t phonambula-backend:latest --no-cache .
+        run: docker build -t phonambula-backend:latest --no-cache .
+
+      # 5. Запускаем backend в фоне
       - name: Run backend in background
         working-directory: ./server
         run: |
           nohup java -jar target/server-0.0.1-SNAPSHOT.jar > backend.log 2>&1 &
           echo "Backend started"
+
+      # 6. Ждём пока сервер реально запустится
       - name: Wait for backend to start
-        run: sleep 15
+        run: |
+          echo "Waiting for backend..."
+          for i in {1..30}; do
+            RESPONSE=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:8080/actuator/health || true)
+            if [ "$RESPONSE" -eq 200 ]; then
+              echo "Backend is up!"
+              break
+            fi
+            sleep 2
+          done
+
+      # 7. Тестируем Users API
       - name: Test GET /api/users
         run: |
-          RESPONSE=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:58080/api/users)
+          RESPONSE=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:8080/api/users)
           if [ "$RESPONSE" -ne 200 ]; then
             echo "Users API failed with $RESPONSE"
             exit 1
           fi
+
+      # 8. Тестируем Roles API
       - name: Test GET /api/roles
         run: |
-          RESPONSE=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:58080/api/roles)
+          RESPONSE=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:8080/api/roles)
           if [ "$RESPONSE" -ne 200 ]; then
             echo "Roles API failed with $RESPONSE"
             exit 1
           fi
-
-      # залогиниться в Docker Hub и запушить образ
-      # - name: Login to Docker Hub
-      #   if: github.ref == 'refs/heads/main'
-      #   uses: docker/login-action@v3
-      #   with:
-      #     username: ${{ secrets.DOCKER_USERNAME }}
-      #     password: ${{ secrets.DOCKER_PASSWORD }}
-      #
-      # - name: Push Docker image
-      #   if: github.ref == 'refs/heads/main'
-      #   working-directory: ./server
-      #   run: |
-      #     docker tag phonambula-backend:latest ${{ secrets.DOCKER_USERNAME }}/phonambula-backend:latest
-      #     docker push ${{ secrets.DOCKER_USERNAME }}/phonambula-backend:latest
