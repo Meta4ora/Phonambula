@@ -1,38 +1,154 @@
-<link rel="manifest" href="/public/manifest.json">
 <!DOCTYPE html>
 <html lang="ru">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Phonambula — Главная</title>
-    <link rel="stylesheet" href="css/common.css">
+    <link rel="manifest" href="/public/manifest.json">
+    <style>
+        :root {
+            --blue: #4D3F8D;
+            --gray: #666;
+            --light-blue: #97DAF5;
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        @font-face {
+            font-family: 'BeerMoney';
+            src: url('fonts/beermoney.ttf') format('truetype');
+            font-weight: normal;
+            font-style: normal;
+            font-display: swap;
+        }
+
+        body {
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-family: 'BeerMoney', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: url('icons/background.png') no-repeat center center;
+            background-size: cover;
+            position: relative;
+        }
+
+        .container {
+            width: 100%;
+            max-width: 420px;
+            padding: 20px;
+            background: rgba(151, 218, 245, 0.9);
+            backdrop-filter: blur(8px);
+            border-radius: 32px;
+            box-shadow: 0 20px 40px -10px rgba(0, 0, 0, 0.3);
+            border: 1px solid rgba(255,255,255,0.5);
+            text-align: center;
+        }
+
+        .page-icon {
+            width: 120px;
+            height: 120px;
+            margin: 0 auto 20px;
+            border-radius: 50%;
+            box-shadow: 0 10px 25px rgba(0,0,0,0.2);
+        }
+
+        h1 {
+            font-size: 2rem;
+            color: var(--blue);
+            margin-bottom: 20px;
+        }
+
+        p {
+            font-size: 1.2rem;
+            color: var(--blue);
+            margin-bottom: 30px;
+            line-height: 1.5;
+        }
+
+        .btn-primary {
+            width: 100%;
+            background: var(--blue);
+            color: white;
+            border: none;
+            border-radius: 24px;
+            padding: 0.9rem;
+            font-size: 1.5rem;
+            font-family: 'BeerMoney', sans-serif;
+            cursor: pointer;
+            transition: 0.3s;
+            box-shadow: 0 4px 15px rgba(77, 63, 141, 0.3);
+        }
+
+        .btn-primary:hover {
+            background: #352b63;
+            transform: scale(1.02);
+        }
+
+        .btn-primary:active {
+            transform: scale(0.98);
+        }
+
+        .btn-secondary {
+            width: 100%;
+            background: #FFFFFF;
+            border: 2px solid var(--blue);
+            color: var(--blue);
+            border-radius: 24px;
+            padding: 0.9rem;
+            font-size: 1.5rem;
+            font-family: 'BeerMoney', sans-serif;
+            cursor: pointer;
+            transition: 0.3s;
+        }
+
+        .btn-secondary:hover {
+            background: #f0f0f0;
+            transform: scale(1.02);
+        }
+
+        .btn-secondary:active {
+            transform: scale(0.98);
+        }
+
+        a {
+            text-decoration: none;
+            display: block;
+            margin-bottom: 12px;
+        }
+
+        a:last-child {
+            margin-bottom: 0;
+        }
+    </style>
 </head>
 <body>
     <div class="container">
-        <div style="text-align:center; margin-bottom:40px;">
-            <img src="icons/icon_page.png" alt="Phonambula" class="page-icon">
-        </div>
+        <img src="icons/icon_page.png" alt="Phonambula" class="page-icon">
 
         <h1>Добро пожаловать в Phonambula</h1>
-        <p style="text-align:center; color: var(--gray); margin-bottom:30px;">
-            Современное приложение для быстрого поиска контактных данных сотрудников!.
+        
+        <p>
+            Современное приложение для быстрого поиска контактных данных сотрудников!
         </p>
 
-        <div style="display:flex; gap:12px; flex-direction:column;">
-            <a href="login.html">
-                <button class="btn-primary">Войти</button>
-            </a>
-            <a href="register.html">
-                <button class="btn-primary" style="background: #FFFFFF; border:1px solid var(--blue); color:var(--blue);">
-                    Регистрация
-                </button>
-            </a>
-        </div>
+        <a href="login.html">
+            <button class="btn-primary">Войти</button>
+        </a>
+        
+        <a href="login.html?form=register">
+    <button class="btn-secondary">Регистрация</button>
+</a>
     </div>
+
+    <script>
+        if ('serviceWorker' in navigator) {
+            navigator.serviceWorker.register('/service-worker.js');
+        }
+    </script>
 </body>
 </html>
-<script>
-if ('serviceWorker' in navigator) {
-  navigator.serviceWorker.register('/service-worker.js');
-}
-</script>
