@@ -125,4 +125,18 @@ public class UserService {
 
         return Optional.empty();
     }
+
+    /**
+     * Проверяет существует ли пользователь с таким логином и паролем
+     */
+    public boolean checkUserExists(String login, String rawPassword) {
+        Optional<User> userOpt = userRepository.findByLogin(login);
+
+        if (userOpt.isPresent()) {
+            User user = userOpt.get();
+            return passwordEncoder.matches(rawPassword, user.getPassword());
+        }
+
+        return false;
+    }
 }
