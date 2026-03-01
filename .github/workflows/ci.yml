@@ -1,4 +1,4 @@
-name: CI - Build & Test
+name: CI - Build, Docker & Test
 
 on:
   push:
@@ -7,13 +7,21 @@ on:
     branches: [ main ]
 
 jobs:
-  build:
+  build-and-test:
     runs-on: ubuntu-latest
+    services:
+      docker:
+        image: docker:24.0.5
+        options: --privileged
+        ports:
+          - 58080:58080
 
     steps:
+      # 1 Получаем код
       - name: Checkout code
         uses: actions/checkout@v4
 
+      # 2 Настраиваем JDK 17
       - name: Set up JDK 17
         uses: actions/setup-java@v4
         with:
@@ -21,33 +29,57 @@ jobs:
           distribution: 'temurin'
           cache: maven
 
-      # 3. Собираем Maven проект (clean + compile + test + package)
-      - name: Build with Maven
+      # 3 Сборка Maven проекта
+      - name: Build Maven project
         working-directory: ./server
         run: mvn -B clean verify
 
+      # 4 Сборка Docker образа
       - name: Build Docker image
         working-directory: ./server
         run: |
-          pwd                          # покажет текущую директорию
-          ls -la                       # список всех файлов (должен показать Dockerfile, mvnw, pom.xml и т.д.)
-          ls -la .mvn/ || echo ".mvn not found"
-          ls -la target/ || echo "target not found yet"
-          file mvnw                    # проверит, executable ли
-          chmod +x mvnw || true        # сделаем executable на всякий
-          docker build -t phonambula-backend:latest --no-cache .
+          chmod +x mvnw
+          docker build -t phonambula-backend:latest .
 
-      # залогиниться в Docker Hub и запушить образ
-      # - name: Login to Docker Hub
-      #   if: github.ref == 'refs/heads/main'
-      #   uses: docker/login-action@v3
-      #   with:
-      #     username: ${{ secrets.DOCKER_USERNAME }}
-      #     password: ${{ secrets.DOCKER_PASSWORD }}
-      #
-      # - name: Push Docker image
-      #   if: github.ref == 'refs/heads/main'
-      #   working-directory: ./server
-      #   run: |
-      #     docker tag phonambula-backend:latest ${{ secrets.DOCKER_USERNAME }}/phonambula-backend:latest
-      #     docker push ${{ secrets.DOCKER_USERNAME }}/phonambula-backend:latest
+      - name: Run backend container
+        id: run_backend
+        run: |
+          HOST_PORT=$(shuf -i 50000-60000 -n 1)
+          echo "HOST_PORT=$HOST_PORT" >> $GITHUB_ENV
+          docker run -d --name phonambula-backend -p $HOST_PORT:8080 phonambula-backend:latest
+          echo "Backend running on port $HOST_PORT"
+          sleep 20
+
+      # 6 Ждём, чтобы сервис поднялся
+      - name: Wait for backend
+        run: |
+          echo "Waiting 20s for backend to start..."
+          sleep 20
+
+      # 7 Тестируем /api/users
+      - name: Test GET /api/users
+        run: |
+          RESPONSE=$(curl -s http://localhost:$HOST_PORT/api/users)
+          echo "Ответ Users API:"
+          echo "$RESPONSE"
+          HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:$HOST_PORT/api/users)
+          if [ "$HTTP_CODE" -ne 200 ]; then
+            echo "Users API failed with HTTP code $HTTP_CODE"
+            exit 1
+          fi
+
+      # 8 Тестируем /api/roles
+      - name: Test GET /api/roles
+        run: |
+          RESPONSE=$(curl -s http://localhost:$HOST_PORT/api/roles)
+          echo "Ответ Roles API:"
+          echo "$RESPONSE"
+          HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:$HOST_PORT/api/roles)
+          if [ "$HTTP_CODE" -ne 200 ]; then
+            echo "Roles API failed with HTTP code $HTTP_CODE"
+            exit 1
+          fi
+
+      # 9 Останавливаем контейнер после тестов
+      - name: Stop backend container
+        run: docker stop phonambula-backend && docker rm phonambula-backend
