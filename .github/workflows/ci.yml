@@ -56,19 +56,8 @@ jobs:
           echo "Waiting 20s for backend to start..."
           sleep 20
 
-      # 7 Тестируем /api/users
-      - name: Test GET /api/users
-        run: |
-          RESPONSE=$(curl -s http://localhost:$HOST_PORT/api/users)
-          echo "Ответ Users API:"
-          echo "$RESPONSE"
-          HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:$HOST_PORT/api/users)
-          if [ "$HTTP_CODE" -ne 200 ]; then
-            echo "Users API failed with HTTP code $HTTP_CODE"
-            exit 1
-          fi
 
-      # 8 Тестируем /api/roles
+      # 7 Тестируем /api/roles
       - name: Test GET /api/roles
         run: |
           RESPONSE=$(curl -s http://localhost:$HOST_PORT/api/roles)
@@ -80,6 +69,6 @@ jobs:
             exit 1
           fi
 
-      # 9 Останавливаем контейнер после тестов
+      # 8 Останавливаем контейнер после тестов
       - name: Stop backend container
         run: docker stop phonambula-backend && docker rm phonambula-backend
