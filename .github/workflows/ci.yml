@@ -50,36 +50,73 @@ jobs:
           echo "Backend running on port $HOST_PORT"
           sleep 20
 
+      - name: Install jq
+        run: sudo apt-get install -y jq
+
       # 6 Ждём, чтобы сервис поднялся
       - name: Wait for backend
         run: |
           echo "Waiting 20s for backend to start..."
           sleep 20
+      
+      # 7 Получаем токены по аккаунту админа
+      - name: Get JWT token
+        run: |
+          echo "Requesting JWT token..."
+          
+          LOGIN_RESPONSE=$(curl -s -X POST http://localhost:$HOST_PORT/auth/login \
+            -H "Content-Type: application/json" \
+            -d '{"login":"admin","password":"admin"}')
+          
+          echo "Login response:"
+          echo "$LOGIN_RESPONSE"
+          
+          TOKEN=$(echo $LOGIN_RESPONSE | jq -r '.token')
+          
+          if [ "$TOKEN" = "null" ] || [ -z "$TOKEN" ]; then
+            echo "Failed to get JWT token"
+            exit 1
+          fi
+          
+          echo "JWT_TOKEN=$TOKEN" >> $GITHUB_ENV
+          echo "Token received"
 
-      # 7 Тестируем /api/users
+      # 8 Тестируем /api/users
       - name: Test GET /api/users
         run: |
-          RESPONSE=$(curl -s http://localhost:$HOST_PORT/api/users)
+          RESPONSE=$(curl -s http://localhost:$HOST_PORT/api/users \
+            -H "Authorization: Bearer $JWT_TOKEN")
+          
           echo "Ответ Users API:"
           echo "$RESPONSE"
-          HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:$HOST_PORT/api/users)
+          
+          HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" \
+            -H "Authorization: Bearer $JWT_TOKEN" \
+            http://localhost:$HOST_PORT/api/users)
+          
           if [ "$HTTP_CODE" -ne 200 ]; then
             echo "Users API failed with HTTP code $HTTP_CODE"
             exit 1
           fi
 
-      # 8 Тестируем /api/roles
+      # 9 Тестируем /api/roles
       - name: Test GET /api/roles
         run: |
-          RESPONSE=$(curl -s http://localhost:$HOST_PORT/api/roles)
+          RESPONSE=$(curl -s http://localhost:$HOST_PORT/api/roles \
+            -H "Authorization: Bearer $JWT_TOKEN")
+          
           echo "Ответ Roles API:"
           echo "$RESPONSE"
-          HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:$HOST_PORT/api/roles)
+          
+          HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" \
+            -H "Authorization: Bearer $JWT_TOKEN" \
+            http://localhost:$HOST_PORT/api/roles)
+          
           if [ "$HTTP_CODE" -ne 200 ]; then
             echo "Roles API failed with HTTP code $HTTP_CODE"
             exit 1
           fi
 
-      # 9 Останавливаем контейнер после тестов
+      # 10 Останавливаем контейнер после тестов
       - name: Stop backend container
         run: docker stop phonambula-backend && docker rm phonambula-backend
