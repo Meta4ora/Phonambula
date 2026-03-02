@@ -59,6 +59,7 @@ jobs:
           echo "Waiting 20s for backend to start..."
           sleep 20
       
+      # 7 Получаем токены по аккаунту админа
       - name: Get JWT token
         run: |
           echo "Requesting JWT token..."
@@ -80,7 +81,7 @@ jobs:
           echo "JWT_TOKEN=$TOKEN" >> $GITHUB_ENV
           echo "Token received"
 
-      # 7 Тестируем /api/users
+      # 8 Тестируем /api/users
       - name: Test GET /api/users
         run: |
           RESPONSE=$(curl -s http://localhost:$HOST_PORT/api/users \
@@ -98,7 +99,7 @@ jobs:
             exit 1
           fi
 
-      # 8 Тестируем /api/roles
+      # 9 Тестируем /api/roles
       - name: Test GET /api/roles
         run: |
           RESPONSE=$(curl -s http://localhost:$HOST_PORT/api/roles \
@@ -116,6 +117,6 @@ jobs:
             exit 1
           fi
 
-      # 9 Останавливаем контейнер после тестов
+      # 10 Останавливаем контейнер после тестов
       - name: Stop backend container
         run: docker stop phonambula-backend && docker rm phonambula-backend
