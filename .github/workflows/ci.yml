@@ -41,6 +41,7 @@ jobs:
           chmod +x mvnw
           docker build -t phonambula-backend:latest .
 
+      # 5 Сборка Docker образа
       - name: Run backend container
         id: run_backend
         run: |
