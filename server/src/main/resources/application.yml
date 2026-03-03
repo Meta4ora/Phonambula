@@ -1,6 +1,7 @@
 spring:
   application:
     name: server
+
   datasource:
     url: jdbc:postgresql://pg4.sweb.ru:5433/arachurki2
     username: arachurki2
@@ -15,6 +16,7 @@ spring:
       validation-timeout: 5000
       leak-detection-threshold: 60000
       connection-test-query: SELECT 1
+
   jpa:
     hibernate:
       ddl-auto: none
@@ -24,7 +26,15 @@ spring:
         dialect: org.hibernate.dialect.PostgreSQLDialect
         format_sql: true
         jdbc.lob.non_contextual_creation: true
+        globally_quoted_identifiers: true
     open-in-view: false
+
   jackson:
     time-zone: Europe/Moscow
     date-format: yyyy-MM-dd'T'HH:mm:ss.SSSXXX
+
+logging:
+  file:
+    name: logs/app.log
+  level:
+    org.springframework.security: TRACE

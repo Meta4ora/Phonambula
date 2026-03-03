@@ -10,7 +10,7 @@ class JwtServiceTest {
 
     @Test
     void generateAndExtractToken_success() {
-        String token = jwtService.generateToken("admin", "ADMIN");
+        String token = jwtService.generateToken("admin");
 
         assertNotNull(token);
 

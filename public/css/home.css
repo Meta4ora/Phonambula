@@ -1,0 +1,210 @@
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+
+@font-face {
+    font-family: 'BeerMoney';
+    src: url('../fonts/beermoney.ttf') format('truetype');
+    font-weight: normal;
+    font-style: normal;
+    font-display: swap;
+}
+
+body {
+    font-family: 'BeerMoney', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    background: url('../icons/background.png') no-repeat center center fixed;
+    background-size: cover;
+    min-height: 100vh;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 20px;
+}
+
+.page-icon {
+    position: absolute;
+    top: 20px;
+    left: 20px;
+    width: 80px;
+    height: 80px;
+    border-radius: 50%;
+    box-shadow: 0 10px 25px rgba(0,0,0,0.2);
+    z-index: 10;
+    border: 3px solid rgba(255,255,255,0.5);
+    cursor: pointer;
+    transition: transform 0.3s;
+}
+
+.page-icon:hover {
+    transform: scale(1.05);
+}
+
+.contacts-container {
+    width: 100%;
+    max-width: 1200px;
+    height: 80vh;
+    display: flex;
+    gap: 20px;
+    background: rgba(151, 218, 245, 0.8);
+    backdrop-filter: blur(10px);
+    border-radius: 32px;
+    padding: 20px;
+    box-shadow: 0 20px 40px -10px rgba(0, 0, 0, 0.3);
+    border: 1px solid rgba(255,255,255,0.5);
+}
+
+.contacts-sidebar {
+    width: 35%;
+    background: rgba(255, 255, 255, 0.3);
+    border-radius: 24px;
+    padding: 20px;
+    overflow-y: auto;
+    border: 1px solid rgba(255,255,255,0.5);
+}
+
+.contacts-sidebar h3 {
+    font-size: 1.8rem;
+    color: #4D3F8D;
+    margin-bottom: 20px;
+    padding-bottom: 10px;
+    border-bottom: 2px solid rgba(77, 63, 141, 0.3);
+}
+
+.contact-tree {
+    list-style: none;
+}
+
+.contact-tree li {
+    margin-bottom: 8px;
+}
+
+.contact-tree .category {
+    font-size: 1.4rem;
+    color: #4D3F8D;
+    font-weight: 600;
+    margin: 15px 0 10px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.contact-tree .category::before {
+    content: '▶';
+    font-size: 1rem;
+    transition: transform 0.3s;
+}
+
+.contact-tree .category.expanded::before {
+    transform: rotate(90deg);
+}
+
+.contact-tree .sub-list {
+    list-style: none;
+    margin-left: 25px;
+    display: none;
+}
+
+.contact-tree .category.expanded + .sub-list {
+    display: block;
+}
+
+.contact-item {
+    padding: 12px 15px;
+    margin: 5px 0;
+    background: rgba(255, 255, 255, 0.5);
+    border-radius: 16px;
+    cursor: pointer;
+    transition: all 0.3s;
+    font-size: 1.2rem;
+    color: #4D3F8D;
+    border: 1px solid transparent;
+}
+
+.contact-item:hover {
+    background: rgba(255, 255, 255, 0.8);
+    transform: translateX(5px);
+    border-color: #4D3F8D;
+}
+
+.contact-item.active {
+    background: #4D3F8D;
+    color: white;
+}
+
+.contact-details {
+    width: 65%;
+    background: rgba(255, 255, 255, 0.5);
+    backdrop-filter: blur(5px);
+    border-radius: 24px;
+    padding: 30px;
+    overflow-y: auto;
+    border: 1px solid rgba(255,255,255,0.5);
+}
+
+.contact-details h2 {
+    font-size: 2.5rem;
+    color: #4D3F8D;
+    margin-bottom: 30px;
+    padding-bottom: 15px;
+    border-bottom: 2px solid rgba(77, 63, 141, 0.3);
+}
+
+.detail-section {
+    margin-bottom: 30px;
+}
+
+.detail-section h4 {
+    font-size: 1.4rem;
+    color: #4D3F8D;
+    margin-bottom: 15px;
+    opacity: 0.8;
+    text-transform: lowercase;
+}
+
+.detail-item {
+    background: rgba(255, 255, 255, 0.7);
+    border-radius: 16px;
+    padding: 20px;
+    margin-bottom: 15px;
+    border: 1px solid rgba(77, 63, 141, 0.2);
+}
+
+.detail-label {
+    font-size: 1.1rem;
+    color: #4D3F8D;
+    opacity: 0.7;
+    margin-bottom: 8px;
+    text-transform: lowercase;
+}
+
+.detail-value {
+    font-size: 1.8rem;
+    color: #4D3F8D;
+    font-weight: 600;
+    word-break: break-word;
+}
+
+.detail-value.small {
+    font-size: 1.4rem;
+}
+
+@media (max-width: 768px) {
+    .contacts-container {
+        flex-direction: column;
+        height: auto;
+    }
+
+    .contacts-sidebar, .contact-details {
+        width: 100%;
+    }
+
+    .page-icon {
+        width: 60px;
+        height: 60px;
+        top: 10px;
+        left: 10px;
+    }
+}

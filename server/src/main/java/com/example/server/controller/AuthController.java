@@ -26,23 +26,20 @@ public class AuthController {
     @PostMapping("/login")
     public ResponseEntity<?> login(@RequestBody AuthRequest request) {
 
-        User user = userService.authenticate(
-                request.getLogin(),
-                request.getPassword()
-        ).orElseThrow(() ->
-                new RuntimeException("Неверный логин или пароль")
-        );
+    User user = userService.authenticate(
+            request.getLogin(),
+            request.getPassword()
+    ).orElseThrow(() ->
+            new RuntimeException("Неверный логин или пароль")
+    );
 
-        String token = jwtService.generateToken(
-                user.getLogin(),
-                user.getIdRole().getNameRole()
-        );
+    String token = jwtService.generateToken(user.getLogin());
 
-        return ResponseEntity.ok(Map.of(
-                "token", token,
-                "login", user.getLogin(),
-                "role", user.getIdRole().getNameRole()
-        ));
+    return ResponseEntity.ok(Map.of(
+            "token", token,
+            "login", user.getLogin(),
+            "role", user.getIdRole().getNameRole()
+    ));
     }
 
     @Data
