@@ -1,4 +1,4 @@
-const API_BASE_URL = 'http://localhost:58080'; // ← твой бэкенд
+const API_BASE_URL = 'http://localhost:58080';
 
 class ApiClient {
     constructor() {
@@ -15,7 +15,6 @@ class ApiClient {
         localStorage.removeItem('token');
     }
 
-    // <-- сюда вставляем обновленный request
     async request(endpoint, options = {}) {
         const url = `${API_BASE_URL}${endpoint}`;
         const headers = {
@@ -26,7 +25,7 @@ class ApiClient {
         const config = {
             ...options,
             headers,
-            credentials: 'include' // ← обязательно для сессионных cookie
+            credentials: 'include'
         };
 
         if (this.token) {

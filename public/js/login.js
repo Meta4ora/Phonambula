@@ -15,7 +15,7 @@ async function handleLogin(event) {
         localStorage.setItem('userName', data.name);
         localStorage.setItem('userLogin', data.login);
 
-        window.location.href = '/home.html';  // ← ИСПРАВЛЕНО!
+        window.location.href = '/home.html';
 
     } catch (error) {
         alert(error.message || 'Ошибка входа');

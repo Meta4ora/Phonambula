@@ -4,7 +4,6 @@ async function loadMyContacts() {
     try {
         const response = await api.get('/api/subscribers/my');
         
-        // Сервер теперь возвращает массив напрямую
         const data = Array.isArray(response) ? response : (response.data || []);
 
         console.log('Получено контактов:', data.length);
@@ -29,7 +28,6 @@ async function loadMyContacts() {
 
         rebuildContactTree();
         
-        // Показываем первого (это теперь всегда "Вы")
         const firstKey = Object.keys(contactsData)[0];
         if (firstKey) {
             showContactDetails(firstKey);
@@ -50,7 +48,6 @@ function rebuildContactTree() {
         return;
     }
 
-    // Первый контакт — всегда "Вы" (сервер уже поставил его первым)
     const firstKey = Object.keys(contactsData)[0];
     const firstContact = contactsData[firstKey];
 
@@ -63,7 +60,6 @@ function rebuildContactTree() {
         </li>
     `;
 
-    // Остальные группы по первой букве фамилии
     const grouped = {};
     Object.entries(contactsData).slice(1).forEach(([key, contact]) => {
         const firstLetter = contact.name.charAt(0).toUpperCase();

@@ -20,10 +20,10 @@ import java.util.List;
 public class SecurityConfig {
 
     @Autowired
-    private JwtFilter jwtFilter;               // ← теперь через поле + @Autowired
+    private JwtFilter jwtFilter;
 
     @Autowired
-    private UserDetailsService userDetailsService;  // если планируете использовать где-то явно
+    private UserDetailsService userDetailsService;
 
     @Bean
     public SecurityFilterChain filterChain(HttpSecurity http) throws Exception {
