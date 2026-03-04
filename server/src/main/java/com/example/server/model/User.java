@@ -24,7 +24,7 @@ public class User {
     @Column(name = "login", nullable = false, length = Integer.MAX_VALUE)
     private String login;
 
-    @Column(name = "\"Password\"", nullable = false, length = Integer.MAX_VALUE)
+    @Column(name = "password", nullable = false, length = Integer.MAX_VALUE)
     @JsonIgnore // Не возвращаем пароль в JSON ответах
     private String password;
 
