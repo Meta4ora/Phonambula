@@ -2,7 +2,6 @@ package com.example.server.model;
 
 import jakarta.persistence.*;
 import com.fasterxml.jackson.annotation.JsonIgnore;
-import java.time.LocalDate;
 
 @Entity
 @Table(name = "users")
@@ -24,19 +23,17 @@ public class User {
     @Column(name = "login", nullable = false, length = Integer.MAX_VALUE)
     private String login;
 
-    @Column(name = "\"Password\"", nullable = false, length = Integer.MAX_VALUE)
-    @JsonIgnore // Не возвращаем пароль в JSON ответах
+    @Column(name = "password", nullable = false, length = Integer.MAX_VALUE)
+    @JsonIgnore
     private String password;
 
-    @ManyToOne(fetch = FetchType.EAGER) // EAGER чтобы роль загружалась сразу
+    @ManyToOne(fetch = FetchType.EAGER)
     @JoinColumn(name = "id_role")
     private Role idRole;
 
-    // Пустой конструктор
     public User() {
     }
 
-    // Конструктор для создания пользователя (без ID и без пароля - установим отдельно)
     public User(String surname, String name, String patronymic, String login, Role role) {
         this.surname = surname;
         this.name = name;
@@ -45,60 +42,25 @@ public class User {
         this.idRole = role;
     }
 
-    // Геттеры и сеттеры
-    public Long getId() {
-        return id;
-    }
+    // getters & setters remain unchanged
+    public Long getId() { return id; }
+    public void setId(Long id) { this.id = id; }
 
-    public void setId(Long id) {
-        this.id = id;
-    }
+    public String getSurname() { return surname; }
+    public void setSurname(String surname) { this.surname = surname; }
 
-    public String getSurname() {
-        return surname;
-    }
+    public String getName() { return name; }
+    public void setName(String name) { this.name = name; }
 
-    public void setSurname(String surname) {
-        this.surname = surname;
-    }
+    public String getPatronymic() { return patronymic; }
+    public void setPatronymic(String patronymic) { this.patronymic = patronymic; }
 
-    public String getName() {
-        return name;
-    }
+    public String getLogin() { return login; }
+    public void setLogin(String login) { this.login = login; }
 
-    public void setName(String name) {
-        this.name = name;
-    }
+    public String getPassword() { return password; }
+    public void setPassword(String password) { this.password = password; }
 
-    public String getPatronymic() {
-        return patronymic;
-    }
-
-    public void setPatronymic(String patronymic) {
-        this.patronymic = patronymic;
-    }
-
-    public String getLogin() {
-        return login;
-    }
-
-    public void setLogin(String login) {
-        this.login = login;
-    }
-
-    public String getPassword() {
-        return password;
-    }
-
-    public void setPassword(String password) {
-        this.password = password;
-    }
-
-    public Role getIdRole() {
-        return idRole;
-    }
-
-    public void setIdRole(Role idRole) {
-        this.idRole = idRole;
-    }
+    public Role getIdRole() { return idRole; }
+    public void setIdRole(Role idRole) { this.idRole = idRole; }
 }
