@@ -1,7 +1,7 @@
 async function handleLogin(event) {
     event.preventDefault();
 
-    const login = document.getElementById('phone-login').value; // ← логин
+    const login = document.getElementById('phone-login').value;
     const password = document.getElementById('password-login').value;
 
     try {
@@ -13,9 +13,9 @@ async function handleLogin(event) {
         api.setToken(data.token);
 
         localStorage.setItem('userName', data.name);
-        localStorage.setItem('userLogin', data.login); // сохраняем логин, а не phone
+        localStorage.setItem('userLogin', data.login);
 
-        window.location.href = '/contacts.html';
+        window.location.href = '/home.html';  // ← ИСПРАВЛЕНО!
 
     } catch (error) {
         alert(error.message || 'Ошибка входа');
@@ -47,7 +47,7 @@ async function handleRegister(event) {
         localStorage.setItem('userName', data.name);
         localStorage.setItem('userLogin', data.login); // сохраняем логин
 
-        window.location.href = '/contacts.html';
+        window.location.href = '/home.html';
 
     } catch (error) {
         alert(error.message || 'Ошибка регистрации');
