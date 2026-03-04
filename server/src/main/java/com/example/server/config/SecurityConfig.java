@@ -22,12 +22,20 @@ public class SecurityConfig {
                 .csrf(csrf -> csrf.disable())
                 .authorizeHttpRequests(auth -> auth
                         .requestMatchers(
-                                "/swagger-ui/**",
+                                "/swagger-ui/",
                                 "/swagger-ui.html",
-                                "/v3/api-docs/**",
-                                "/auth/**"
+                                "/v3/api-docs/",
+                                "/auth/"
                         ).permitAll()
-                        .anyRequest().authenticated()
+
+                        .requestMatchers("/user/").hasRole("USER")
+
+                        // временно доступ к аудиту открыт для всех
+                        .requestMatchers("/api/audit/**").permitAll()
+
+                        .requestMatchers("/admin/**").hasRole("ADMIN")
+
+                        .anyRequest().permitAll()
                 )
                 .addFilterBefore(jwtFilter,
                         UsernamePasswordAuthenticationFilter.class)

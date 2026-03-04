@@ -2,12 +2,15 @@ package com.example.server.service;
 
 import com.example.server.model.*;
 import com.example.server.repository.SubscriberRepository;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDate;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 
 @Service
@@ -19,18 +22,24 @@ public class SubscriberService {
     private final PostService postService;
     private final DivisionService divisionService;
     private final BuildingService buildingService;
+    private final AuditLogService auditLogService;
+    private final CurrentUserService currentUserService;
 
     @Autowired
     public SubscriberService(SubscriberRepository subscriberRepository,
                              UserService userService,
                              PostService postService,
                              DivisionService divisionService,
-                             BuildingService buildingService) {
+                             BuildingService buildingService,
+                             AuditLogService auditLogService,
+                             CurrentUserService currentUserService) {
         this.subscriberRepository = subscriberRepository;
         this.userService = userService;
         this.postService = postService;
         this.divisionService = divisionService;
         this.buildingService = buildingService;
+        this.auditLogService = auditLogService;
+        this.currentUserService = currentUserService;
     }
 
     public List<Subscriber> findAll() {
@@ -67,7 +76,6 @@ public class SubscriberService {
 
         // Строгая проверка на уникальность мобильного номера телефона
         if (cleanMobile != null && !cleanMobile.isEmpty()) {
-            // Ищем абонента с таким же очищенным номером
             List<Subscriber> existingWithMobile = subscriberRepository.findByCleanMobilePhoneNumber(cleanMobile);
             if (!existingWithMobile.isEmpty()) {
                 throw new RuntimeException("Абонент с мобильным телефоном " + mobilePhoneNumber +
@@ -108,16 +116,84 @@ public class SubscriberService {
                 mobilePhoneNumber != null ? mobilePhoneNumber : ""
         );
 
-        return subscriberRepository.save(subscriber);
+        Subscriber savedSubscriber = subscriberRepository.save(subscriber);
+
+        // Логирование
+        try {
+            Map<String, Object> subscriberData = Map.of(
+                    "id", savedSubscriber.getId(),
+                    "userId", savedSubscriber.getIdUser() != null ? savedSubscriber.getIdUser().getId() : null,
+                    "postId", savedSubscriber.getIdPost() != null ? savedSubscriber.getIdPost().getId() : null,
+                    "divisionId", savedSubscriber.getIdDivision() != null ? savedSubscriber.getIdDivision().getId() : null,
+                    "buildingId", savedSubscriber.getIdBuilding() != null ? savedSubscriber.getIdBuilding().getId() : null,
+                    "mobilePhone", savedSubscriber.getMobilePhoneNumber()
+            );
+
+            auditLogService.createAuditLog(
+                    currentUserService.getActorForLogging(),
+                    "INSERT",
+                    "subscribers",
+                    savedSubscriber.getId().intValue(),
+                    null,
+                    subscriberData
+            );
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+
+        return savedSubscriber;
     }
 
     @Transactional
     public Subscriber save(Subscriber subscriber) {
+        boolean isNew = subscriber.getId() == null;
+        Map<String, Object> beforeData = null;
+
+        if (!isNew) {
+            Optional<Subscriber> existing = findById(subscriber.getId());
+            if (existing.isPresent()) {
+                beforeData = Map.of(
+                    "id", existing.get().getId(),
+                    "userId", existing.get().getIdUser() != null ? existing.get().getIdUser().getId() : null,
+                    "postId", existing.get().getIdPost() != null ? existing.get().getIdPost().getId() : null,
+                    "divisionId", existing.get().getIdDivision() != null ? existing.get().getIdDivision().getId() : null,
+                    "buildingId", existing.get().getIdBuilding() != null ? existing.get().getIdBuilding().getId() : null,
+                    "mobilePhone", existing.get().getMobilePhoneNumber()
+                );
+            }
+        }
+
         // Проверка на уникальность при сохранении
-        validatePhoneUniqueness(subscriber, null);
+        validatePhoneUniqueness(subscriber, isNew ? null : subscriber.getId());
         // Проверяем, что все связанные сущности существуют
         validateSubscriberRelations(subscriber);
-        return subscriberRepository.save(subscriber);
+
+        Subscriber savedSubscriber = subscriberRepository.save(subscriber);
+
+        // Логирование
+        try {
+            Map<String, Object> afterData = Map.of(
+                    "id", savedSubscriber.getId(),
+                    "userId", savedSubscriber.getIdUser() != null ? savedSubscriber.getIdUser().getId() : null,
+                    "postId", savedSubscriber.getIdPost() != null ? savedSubscriber.getIdPost().getId() : null,
+                    "divisionId", savedSubscriber.getIdDivision() != null ? savedSubscriber.getIdDivision().getId() : null,
+                    "buildingId", savedSubscriber.getIdBuilding() != null ? savedSubscriber.getIdBuilding().getId() : null,
+                    "mobilePhone", savedSubscriber.getMobilePhoneNumber()
+            );
+
+            auditLogService.createAuditLog(
+                    currentUserService.getActorForLogging(),
+                    isNew ? "INSERT" : "UPDATE",
+                    "subscribers",
+                    savedSubscriber.getId().intValue(),
+                    beforeData,
+                    afterData
+            );
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+
+        return savedSubscriber;
     }
 
     @Transactional
@@ -174,7 +250,7 @@ public class SubscriberService {
             existingSubscriber.setMobilePhoneNumber(subscriber.getMobilePhoneNumber());
         }
 
-        return subscriberRepository.save(existingSubscriber);
+        return save(existingSubscriber);
     }
 
     /**
@@ -290,6 +366,34 @@ public class SubscriberService {
 
     @Transactional
     public void deleteById(Long id) {
-        subscriberRepository.deleteById(id);
+        Optional<Subscriber> subscriberOpt = findById(id);
+        if (subscriberOpt.isPresent()) {
+            Subscriber subscriber = subscriberOpt.get();
+
+            // Логирование до удаления
+            try {
+                Map<String, Object> beforeData = Map.of(
+                        "id", subscriber.getId(),
+                        "userId", subscriber.getIdUser() != null ? subscriber.getIdUser().getId() : null,
+                        "postId", subscriber.getIdPost() != null ? subscriber.getIdPost().getId() : null,
+                        "divisionId", subscriber.getIdDivision() != null ? subscriber.getIdDivision().getId() : null,
+                        "buildingId", subscriber.getIdBuilding() != null ? subscriber.getIdBuilding().getId() : null,
+                        "mobilePhone", subscriber.getMobilePhoneNumber()
+                );
+
+                auditLogService.createAuditLog(
+                        currentUserService.getActorForLogging(),
+                        "DELETE",
+                        "subscribers",
+                        id.intValue(),
+                        beforeData,
+                        null
+                );
+            } catch (Exception e) {
+                e.printStackTrace();
+            }
+
+            subscriberRepository.deleteById(id);
+        }
     }
 }
