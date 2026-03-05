@@ -10,56 +10,95 @@
     <img src="icons/icon_page.png" alt="Phonambula" class="page-icon">
   
   <div class="cards-container">
-    <div class="login-card active" id="loginCard">
-      <h2>Войдите в приложение</h2>
 
-      <div class="input-field">
-        <label for="phone-login">логин</label>
-        <input type="tel" id="phone-login" name="phone" placeholder="Ваш логин..." autocomplete="off">
-      </div>
+  <!-- ===== LOGIN ===== -->
+  <div class="login-card active" id="loginCard">
+    <h2>Войдите в приложение</h2>
 
-      <div class="input-field">
-        <label for="password-login">пароль</label>
-        <input type="password" id="password-login" name="password" placeholder="··········">
-      </div>
-      
-      <button class="submit-btn">Войти</button>
-      
-      <div class="signup-prompt" id="switch-to-register">
-        <span>Нет аккаунта?</span> <span class="register-link">Зарегистрироваться</span>
-      </div>
+    <div class="input-field">
+      <label>логин</label>
+      <input type="text" id="loginAuth" placeholder="Ваш логин...">
     </div>
 
-    <div class="register-card" id="registerCard">
-      <h2>Зарегистрируйтесь</h2>
+    <div class="input-field">
+      <label>пароль</label>
+      <input type="password" id="passwordAuth" placeholder="··········">
+    </div>
 
-      <div class="input-field">
-        <label for="name">имя</label>
-        <input type="text" id="name" name="name" placeholder="Иван Петров" autocomplete="name">
-      </div>
+    <button class="submit-btn" onclick="login()">Войти</button>
 
-      <div class="input-field">
-        <label for="phone-reg">телефон</label>
-        <input type="tel" id="phone-reg" name="phone" placeholder="+7 (999) 123-45-67" autocomplete="tel">
-      </div>
-
-      <div class="input-field">
-        <label for="password-reg">пароль</label>
-        <input type="password" id="password-reg" name="password" placeholder="··········" autocomplete="new-password">
-      </div>
-
-      <div class="input-field">
-        <label for="confirm-password">повторите пароль</label>
-        <input type="password" id="confirm-password" name="confirm-password" placeholder="··········" autocomplete="new-password">
-      </div>
-      
-      <button class="submit-btn">Зарегистрироваться</button>
-      
-      <div class="login-prompt" id="switch-to-login">
-        <span>Уже есть аккаунт?</span> <span class="login-link">Войти</span>
-      </div>
+    <div class="signup-prompt" onclick="switchToRegister()">
+      <span>Нет аккаунта?</span> <a class="register-link">Зарегистрироваться</a>
     </div>
   </div>
+
+
+  <!-- ===== REGISTER STEP 1 ===== -->
+  <div class="register-card" id="registerCard">
+    <h2>Зарегистрируйтесь</h2>
+
+    <div class="input-field">
+      <label>имя</label>
+      <input type="text" id="name" placeholder="Иван">
+    </div>
+
+    <div class="input-field">
+      <label>логин</label>
+      <input type="text" id="login">
+    </div>
+
+    <div class="input-field">
+      <label>пароль</label>
+      <input type="password" id="password">
+    </div>
+
+    <div class="input-field">
+      <label>повторите пароль</label>
+      <input type="password" id="confirmPassword">
+    </div>
+
+    <button class="submit-btn" onclick="goToStep2()">Далее</button>
+
+    <div class="login-prompt" onclick="switchToLogin()">
+      Уже есть аккаунт? <a>Войти</a>
+    </div>
+  </div>
+
+
+  <!-- ===== REGISTER STEP 2 ===== -->
+  <div class="register-card" id="registerStep2">
+    <h2>Дополнительные данные</h2>
+
+    <div class="input-field">
+      <label>роль</label>
+      <select id="roleSelect"></select>
+    </div>
+
+    <div class="input-field">
+      <label>корпус</label>
+      <select id="buildingSelect"></select>
+    </div>
+
+    <div class="input-field">
+      <label>отдел</label>
+      <select id="divisionSelect"></select>
+    </div>
+
+    <div class="input-field">
+      <label>должность</label>
+      <select id="postSelect"></select>
+    </div>
+
+    <button class="submit-btn" onclick="finishRegistration()">
+      Завершить регистрацию
+    </button>
+
+    <div class="login-prompt" onclick="backToStep1()">
+      Назад
+    </div>
+  </div>
+
+</div>
 
   <script src="js/api.js"></script>
   <script src="js/login.js"></script>

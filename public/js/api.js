@@ -1,4 +1,4 @@
-const API_BASE_URL = 'http://localhost:58080'; // ← твой бэкенд
+const API_BASE_URL = 'http://localhost:58080';
 
 class ApiClient {
     constructor() {
@@ -15,7 +15,6 @@ class ApiClient {
         localStorage.removeItem('token');
     }
 
-    // <-- сюда вставляем обновленный request
     async request(endpoint, options = {}) {
         const url = `${API_BASE_URL}${endpoint}`;
         const headers = {
@@ -26,7 +25,7 @@ class ApiClient {
         const config = {
             ...options,
             headers,
-            credentials: 'include' // ← обязательно для сессионных cookie
+            credentials: 'include'
         };
 
         if (this.token) {
@@ -40,6 +39,9 @@ class ApiClient {
             window.location.href = '/login.html';
             throw new Error('Unauthorized');
         }
+
+        // Если тело пустое, не пытаться делать JSON
+        if (response.status === 204) return null;
 
         const data = await response.json();
 
@@ -58,6 +60,19 @@ class ApiClient {
         return this.request(endpoint, {
             method: 'POST',
             body: JSON.stringify(body)
+        });
+    }
+
+    async put(endpoint, body) {
+        return this.request(endpoint, {
+            method: 'PUT',
+            body: JSON.stringify(body)
+        });
+    }
+
+    async delete(endpoint) {
+        return this.request(endpoint, {
+            method: 'DELETE'
         });
     }
 }

@@ -26,51 +26,47 @@ public class JwtFilter extends OncePerRequestFilter {
     private UserDetailsService userDetailsService;
 
     @Override
-    protected boolean shouldNotFilter(HttpServletRequest request) throws ServletException {
+    protected boolean shouldNotFilter(HttpServletRequest request) {
         String path = request.getServletPath();
-        return path.startsWith("/auth/") ||
-               path.startsWith("/swagger-ui/") ||
-               path.startsWith("/v3/api-docs/") ||
-               path.startsWith("/swagger-resources/") ||
-               path.startsWith("/webjars/");
+        return path.startsWith("/auth/")
+                || path.startsWith("/swagger-ui/")
+                || path.startsWith("/v3/api-docs/")
+                || path.startsWith("/swagger-resources/")
+                || path.startsWith("/webjars/");
     }
 
     @Override
     protected void doFilterInternal(HttpServletRequest request,
                                     HttpServletResponse response,
-                                    FilterChain filterChain) throws ServletException, IOException {
+                                    FilterChain filterChain)
+            throws ServletException, IOException {
 
-        String header = request.getHeader("Authorization");
+        final String header = request.getHeader("Authorization");
 
-        if (header == null || !header.startsWith("Bearer ")) {
-            filterChain.doFilter(request, response);
-            return;
-        }
+        if (header != null && header.startsWith("Bearer ")) {
+            final String token = header.substring(7);
 
-        String token = header.substring(7);
+            // Проверяем валидность токена
+            if (jwtService.validateToken(token)) {
+                String login = jwtService.extractLogin(token);
 
-        if (!jwtService.validateToken(token)) {
-            filterChain.doFilter(request, response);
-            return;
-        }
+                if (login != null && SecurityContextHolder.getContext().getAuthentication() == null) {
+                    UserDetails userDetails = userDetailsService.loadUserByUsername(login);
 
-        String login = jwtService.extractLogin(token);
-
-        try {
-            UserDetails userDetails = userDetailsService.loadUserByUsername(login);
-
-            UsernamePasswordAuthenticationToken authToken =
-                    new UsernamePasswordAuthenticationToken(
-                            userDetails,
-                            null,
-                            userDetails.getAuthorities()
+                    // Создаём объект аутентификации
+                    UsernamePasswordAuthenticationToken authToken =
+                            new UsernamePasswordAuthenticationToken(
+                                    userDetails,
+                                    null,
+                                    userDetails.getAuthorities()
+                            );
+                    authToken.setDetails(
+                            new WebAuthenticationDetailsSource().buildDetails(request)
                     );
 
-            authToken.setDetails(new WebAuthenticationDetailsSource().buildDetails(request));
-            SecurityContextHolder.getContext().setAuthentication(authToken);
-        } catch (Exception e) {
-            System.err.println("Ошибка загрузки пользователя из токена: " + login);
-            e.printStackTrace();
+                    SecurityContextHolder.getContext().setAuthentication(authToken);
+                }
+            }
         }
 
         filterChain.doFilter(request, response);

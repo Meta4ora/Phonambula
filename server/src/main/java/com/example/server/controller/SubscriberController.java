@@ -1,15 +1,15 @@
 package com.example.server.controller;
 
-import com.example.server.model.Subscriber;
-import com.example.server.model.User;
-import com.example.server.service.SubscriberService;
-import com.example.server.service.UserService;
+import com.example.server.model.*;
+import com.example.server.service.*;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.web.bind.annotation.*;
 
+import java.time.LocalDate;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -21,31 +21,34 @@ public class SubscriberController {
 
     private final SubscriberService subscriberService;
     private final UserService userService;
+    private final PostService postService;
+    private final DivisionService divisionService;
+    private final BuildingService buildingService;
 
     @Autowired
-    public SubscriberController(SubscriberService subscriberService, UserService userService) {
+    public SubscriberController(SubscriberService subscriberService, 
+                               UserService userService,
+                               PostService postService,
+                               DivisionService divisionService,
+                               BuildingService buildingService) {
         this.subscriberService = subscriberService;
         this.userService = userService;
+        this.postService = postService;
+        this.divisionService = divisionService;
+        this.buildingService = buildingService;
     }
 
+    // Получение всех абонентов текущего пользователя
     @GetMapping("/my")
-    public ResponseEntity<List<Map<String, Object>>> getMySubscribers() {
+    public ResponseEntity<List<Map<String, Object>>> getSubscribers() {
         Authentication auth = SecurityContextHolder.getContext().getAuthentication();
         String login = auth.getName();
 
         User currentUser = userService.findByLogin(login)
                 .orElseThrow(() -> new RuntimeException("Пользователь не найден"));
 
+        // Используем findAll(), fetch с join можно настроить в сервисе при необходимости
         List<Subscriber> subscribers = subscriberService.findAll();
-
-        Long currentId = currentUser.getId();
-        subscribers.sort((a, b) -> {
-            boolean aIsMe = a.getIdUser() != null && a.getIdUser().getId().equals(currentId);
-            boolean bIsMe = b.getIdUser() != null && b.getIdUser().getId().equals(currentId);
-            if (aIsMe) return -1;
-            if (bIsMe) return 1;
-            return 0;
-        });
 
         List<Map<String, Object>> result = subscribers.stream()
                 .map(this::toContactMap)
@@ -54,6 +57,7 @@ public class SubscriberController {
         return ResponseEntity.ok(result);
     }
 
+    // Маппинг абонента в формат для фронтенда
     private Map<String, Object> toContactMap(Subscriber sub) {
         User user = sub.getIdUser();
         Map<String, Object> map = new HashMap<>();
@@ -70,40 +74,100 @@ public class SubscriberController {
         map.put("internalPhone", sub.getInternalPhoneNumber() != null ? sub.getInternalPhoneNumber() : "");
         map.put("cabinet", sub.getCabinetNumber() != null ? sub.getCabinetNumber() : "");
         map.put("position", sub.getIdPost() != null ? sub.getIdPost().getNamePost() : "");
+        map.put("positionId", sub.getIdPost() != null ? sub.getIdPost().getId() : null);
         map.put("department", sub.getIdDivision() != null ? sub.getIdDivision().getNameDivision() : "");
+        map.put("departmentId", sub.getIdDivision() != null ? sub.getIdDivision().getId() : null);
         map.put("building", sub.getIdBuilding() != null ? sub.getIdBuilding().getNameBuilding() : "");
+        map.put("buildingId", sub.getIdBuilding() != null ? sub.getIdBuilding().getId() : null);
         map.put("dateBirth", sub.getDateBirth());
+
+        map.put("userId", user.getId());
+        map.put("role", user.getIdRole().getNameRole());
 
         return map;
     }
 
-    @GetMapping
-    public ResponseEntity<List<Subscriber>> getAllSubscribers() {
-        return ResponseEntity.ok(subscriberService.findAll());
-    }
-
-    @GetMapping("/{id}")
-    public ResponseEntity<Subscriber> getSubscriberById(@PathVariable Long id) {
-        return subscriberService.findById(id)
-                .map(ResponseEntity::ok)
-                .orElseGet(() -> ResponseEntity.notFound().build());
-    }
-
-    @PostMapping
-    public ResponseEntity<Subscriber> createSubscriber(@RequestBody Subscriber subscriber) {
-        Subscriber saved = subscriberService.save(subscriber);
-        return ResponseEntity.status(201).body(saved);
-    }
-
+    // Обновление абонента
     @PutMapping("/{id}")
-    public ResponseEntity<Subscriber> updateSubscriber(@PathVariable Long id, @RequestBody Subscriber subscriber) {
-        Subscriber updated = subscriberService.update(id, subscriber);
-        return ResponseEntity.ok(updated);
+    public ResponseEntity<?> updateSubscriber(@PathVariable Long id, @RequestBody Map<String, Object> updatedFields) {
+        try {
+            Authentication auth = SecurityContextHolder.getContext().getAuthentication();
+            String login = auth.getName();
+
+            User currentUser = userService.findByLogin(login)
+                    .orElseThrow(() -> new RuntimeException("Пользователь не найден"));
+
+            Subscriber existing = subscriberService.findById(id)
+                    .orElseThrow(() -> new RuntimeException("Абонент не найден"));
+
+            boolean isAdmin = currentUser.getIdRole().getNameRole().equalsIgnoreCase("Администратор");
+            boolean isSelf = existing.getIdUser().getId().equals(currentUser.getId());
+
+            //if (!isAdmin && !isSelf) {
+            //    return ResponseEntity.status(HttpStatus.FORBIDDEN)
+            //            .body(Map.of("error", "Нет прав на редактирование"));
+            //}
+
+            Subscriber updatedSubscriber = new Subscriber();
+            updatedSubscriber.setId(existing.getId());
+            updatedSubscriber.setIdUser(existing.getIdUser());
+
+            // Обновляем простые поля
+            updatedSubscriber.setMobilePhoneNumber((String) updatedFields.getOrDefault("mobilePhoneNumber", existing.getMobilePhoneNumber()));
+            updatedSubscriber.setLandlinePhoneNumber((String) updatedFields.getOrDefault("landlinePhoneNumber", existing.getLandlinePhoneNumber()));
+            updatedSubscriber.setInternalPhoneNumber((String) updatedFields.getOrDefault("internalPhoneNumber", existing.getInternalPhoneNumber()));
+            updatedSubscriber.setCabinetNumber((String) updatedFields.getOrDefault("cabinetNumber", existing.getCabinetNumber()));
+            updatedSubscriber.setDateBirth((LocalDate) updatedFields.getOrDefault("dateBirth", existing.getDateBirth()));
+
+            // Обновляем связи через ID
+            if (updatedFields.containsKey("postId") && updatedFields.get("postId") != null) {
+                Integer postId = Integer.parseInt(updatedFields.get("postId").toString());
+                Post post = postService.findById(postId)
+                        .orElseThrow(() -> new RuntimeException("Должность не найдена"));
+                updatedSubscriber.setIdPost(post);
+            } else {
+                updatedSubscriber.setIdPost(existing.getIdPost());
+            }
+
+            if (updatedFields.containsKey("departmentId") && updatedFields.get("departmentId") != null) {
+                Integer divisionId = Integer.parseInt(updatedFields.get("departmentId").toString());
+                Division division = divisionService.findById(divisionId)
+                        .orElseThrow(() -> new RuntimeException("Отдел не найден"));
+                updatedSubscriber.setIdDivision(division);
+            } else {
+                updatedSubscriber.setIdDivision(existing.getIdDivision());
+            }
+
+            if (updatedFields.containsKey("buildingId") && updatedFields.get("buildingId") != null) {
+                Integer buildingId = Integer.parseInt(updatedFields.get("buildingId").toString());
+                Building building = buildingService.findById(buildingId)
+                        .orElseThrow(() -> new RuntimeException("Здание не найдено"));
+                updatedSubscriber.setIdBuilding(building);
+            } else {
+                updatedSubscriber.setIdBuilding(existing.getIdBuilding());
+            }
+
+            Subscriber saved = subscriberService.update(id, updatedSubscriber);
+
+            return ResponseEntity.ok(toContactMap(saved));
+
+        } catch (Exception e) {
+            e.printStackTrace();
+            return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                    .body(Map.of("error", e.getMessage()));
+        }
     }
 
+    // Удаление абонента
     @DeleteMapping("/{id}")
-    public ResponseEntity<Void> deleteSubscriber(@PathVariable Long id) {
-        subscriberService.deleteById(id);
-        return ResponseEntity.noContent().build();
+    public ResponseEntity<?> deleteSubscriber(@PathVariable Long id) {
+        try {
+            subscriberService.deleteById(id);
+            return ResponseEntity.noContent().build();
+        } catch (Exception e) {
+            e.printStackTrace();
+            return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                    .body(Map.of("error", e.getMessage()));
+        }
     }
 }
