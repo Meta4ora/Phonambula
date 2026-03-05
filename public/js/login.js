@@ -116,7 +116,6 @@ window.addEventListener('popstate', () => {
 
 let tempRegisterData = {};
 
-// ===== АНИМАЦИЯ LOGIN → REGISTER =====
 function switchToRegister() {
     const loginCard = document.getElementById("loginCard");
     const registerCard = document.getElementById("registerCard");
@@ -133,7 +132,6 @@ function switchToRegister() {
     }, 500);
 }
 
-// ===== АНИМАЦИЯ REGISTER → LOGIN =====
 function switchToLogin() {
     const loginCard = document.getElementById("loginCard");
     const registerCard = document.getElementById("registerCard");
@@ -152,7 +150,6 @@ function switchToLogin() {
     }, 500);
 }
 
-// ===== STEP 1 → STEP 2 =====
 async function goToStep2() {
 
     const name = document.getElementById("name").value.trim();
@@ -189,7 +186,6 @@ async function goToStep2() {
     await loadDropdowns();
 }
 
-// ===== НАЗАД К ШАГУ 1 =====
 function backToStep1() {
     const step1 = document.getElementById("registerCard");
     const step2 = document.getElementById("registerStep2");
@@ -206,7 +202,6 @@ function backToStep1() {
     }, 500);
 }
 
-// ===== ЗАГРУЗКА СПИСКОВ =====
 async function loadDropdowns() {
     const roles = await api.get("/api/roles");
     const buildings = await api.get("/api/buildings");
@@ -231,7 +226,6 @@ function fillSelect(id, data, valueField, textField) {
     });
 }
 
-// ===== ФИНАЛЬНАЯ РЕГИСТРАЦИЯ =====
 async function finishRegistration() {
 
     const response = await api.post("/auth/register", {
@@ -250,7 +244,6 @@ async function finishRegistration() {
     window.location.href = "/home.html";
 }
 
-// ===== LOGIN =====
 async function login() {
     const loginValue = document.getElementById("loginAuth").value;
     const passwordValue = document.getElementById("passwordAuth").value;

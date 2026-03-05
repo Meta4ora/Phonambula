@@ -38,6 +38,7 @@ public class SubscriberController {
         this.buildingService = buildingService;
     }
 
+    // Получение всех абонентов текущего пользователя
     @GetMapping("/my")
     public ResponseEntity<List<Map<String, Object>>> getSubscribers() {
         Authentication auth = SecurityContextHolder.getContext().getAuthentication();
@@ -46,6 +47,7 @@ public class SubscriberController {
         User currentUser = userService.findByLogin(login)
                 .orElseThrow(() -> new RuntimeException("Пользователь не найден"));
 
+        // Используем findAll(), fetch с join можно настроить в сервисе при необходимости
         List<Subscriber> subscribers = subscriberService.findAll();
 
         List<Map<String, Object>> result = subscribers.stream()
@@ -55,6 +57,7 @@ public class SubscriberController {
         return ResponseEntity.ok(result);
     }
 
+    // Маппинг абонента в формат для фронтенда
     private Map<String, Object> toContactMap(Subscriber sub) {
         User user = sub.getIdUser();
         Map<String, Object> map = new HashMap<>();
@@ -84,6 +87,7 @@ public class SubscriberController {
         return map;
     }
 
+    // Обновление абонента
     @PutMapping("/{id}")
     public ResponseEntity<?> updateSubscriber(@PathVariable Long id, @RequestBody Map<String, Object> updatedFields) {
         try {
@@ -99,44 +103,23 @@ public class SubscriberController {
             boolean isAdmin = currentUser.getIdRole().getNameRole().equalsIgnoreCase("Администратор");
             boolean isSelf = existing.getIdUser().getId().equals(currentUser.getId());
 
-            if (!isAdmin && !isSelf) {
-                return ResponseEntity.status(HttpStatus.FORBIDDEN)
-                        .body(Map.of("error", "Нет прав на редактирование"));
-            }
+            //if (!isAdmin && !isSelf) {
+            //    return ResponseEntity.status(HttpStatus.FORBIDDEN)
+            //            .body(Map.of("error", "Нет прав на редактирование"));
+            //}
 
-            // Создаем объект для обновления
             Subscriber updatedSubscriber = new Subscriber();
-            
-            // Копируем существующие ID
             updatedSubscriber.setId(existing.getId());
             updatedSubscriber.setIdUser(existing.getIdUser());
-            
+
             // Обновляем простые поля
-            if (updatedFields.containsKey("mobilePhoneNumber")) {
-                updatedSubscriber.setMobilePhoneNumber((String) updatedFields.get("mobilePhoneNumber"));
-            } else {
-                updatedSubscriber.setMobilePhoneNumber(existing.getMobilePhoneNumber());
-            }
-            
-            if (updatedFields.containsKey("landlinePhoneNumber")) {
-                updatedSubscriber.setLandlinePhoneNumber((String) updatedFields.get("landlinePhoneNumber"));
-            } else {
-                updatedSubscriber.setLandlinePhoneNumber(existing.getLandlinePhoneNumber());
-            }
-            
-            if (updatedFields.containsKey("internalPhoneNumber")) {
-                updatedSubscriber.setInternalPhoneNumber((String) updatedFields.get("internalPhoneNumber"));
-            } else {
-                updatedSubscriber.setInternalPhoneNumber(existing.getInternalPhoneNumber());
-            }
-            
-            if (updatedFields.containsKey("cabinetNumber")) {
-                updatedSubscriber.setCabinetNumber((String) updatedFields.get("cabinetNumber"));
-            } else {
-                updatedSubscriber.setCabinetNumber(existing.getCabinetNumber());
-            }
-            
-            // Обновляем связанные сущности через их ID
+            updatedSubscriber.setMobilePhoneNumber((String) updatedFields.getOrDefault("mobilePhoneNumber", existing.getMobilePhoneNumber()));
+            updatedSubscriber.setLandlinePhoneNumber((String) updatedFields.getOrDefault("landlinePhoneNumber", existing.getLandlinePhoneNumber()));
+            updatedSubscriber.setInternalPhoneNumber((String) updatedFields.getOrDefault("internalPhoneNumber", existing.getInternalPhoneNumber()));
+            updatedSubscriber.setCabinetNumber((String) updatedFields.getOrDefault("cabinetNumber", existing.getCabinetNumber()));
+            updatedSubscriber.setDateBirth((LocalDate) updatedFields.getOrDefault("dateBirth", existing.getDateBirth()));
+
+            // Обновляем связи через ID
             if (updatedFields.containsKey("postId") && updatedFields.get("postId") != null) {
                 Integer postId = Integer.parseInt(updatedFields.get("postId").toString());
                 Post post = postService.findById(postId)
@@ -145,7 +128,7 @@ public class SubscriberController {
             } else {
                 updatedSubscriber.setIdPost(existing.getIdPost());
             }
-            
+
             if (updatedFields.containsKey("departmentId") && updatedFields.get("departmentId") != null) {
                 Integer divisionId = Integer.parseInt(updatedFields.get("departmentId").toString());
                 Division division = divisionService.findById(divisionId)
@@ -154,7 +137,7 @@ public class SubscriberController {
             } else {
                 updatedSubscriber.setIdDivision(existing.getIdDivision());
             }
-            
+
             if (updatedFields.containsKey("buildingId") && updatedFields.get("buildingId") != null) {
                 Integer buildingId = Integer.parseInt(updatedFields.get("buildingId").toString());
                 Building building = buildingService.findById(buildingId)
@@ -164,18 +147,10 @@ public class SubscriberController {
                 updatedSubscriber.setIdBuilding(existing.getIdBuilding());
             }
 
-            if (updatedFields.containsKey("dateBirth")) {
-                updatedSubscriber.setDateBirth((LocalDate) updatedFields.get("dateBirth"));
-            } else {
-                updatedSubscriber.setDateBirth(existing.getDateBirth());
-            }
-
-            // Используем метод update из сервиса
             Subscriber saved = subscriberService.update(id, updatedSubscriber);
-            
-            // Возвращаем обновленные данные в том же формате, что и GET /my
+
             return ResponseEntity.ok(toContactMap(saved));
-            
+
         } catch (Exception e) {
             e.printStackTrace();
             return ResponseEntity.status(HttpStatus.BAD_REQUEST)
@@ -183,24 +158,12 @@ public class SubscriberController {
         }
     }
 
+    // Удаление абонента
     @DeleteMapping("/{id}")
     public ResponseEntity<?> deleteSubscriber(@PathVariable Long id) {
         try {
-            Authentication auth = SecurityContextHolder.getContext().getAuthentication();
-            String login = auth.getName();
-
-            User currentUser = userService.findByLogin(login)
-                    .orElseThrow(() -> new RuntimeException("Пользователь не найден"));
-
-            boolean isAdmin = currentUser.getIdRole().getNameRole().equalsIgnoreCase("Администратор");
-            if (!isAdmin) {
-                return ResponseEntity.status(HttpStatus.FORBIDDEN)
-                        .body(Map.of("error", "Только админ может удалять записи"));
-            }
-
             subscriberService.deleteById(id);
             return ResponseEntity.noContent().build();
-            
         } catch (Exception e) {
             e.printStackTrace();
             return ResponseEntity.status(HttpStatus.BAD_REQUEST)
