@@ -40,6 +40,9 @@ class ApiClient {
             throw new Error('Unauthorized');
         }
 
+        // Если тело пустое, не пытаться делать JSON
+        if (response.status === 204) return null;
+
         const data = await response.json();
 
         if (!response.ok) {
@@ -57,6 +60,19 @@ class ApiClient {
         return this.request(endpoint, {
             method: 'POST',
             body: JSON.stringify(body)
+        });
+    }
+
+    async put(endpoint, body) {
+        return this.request(endpoint, {
+            method: 'PUT',
+            body: JSON.stringify(body)
+        });
+    }
+
+    async delete(endpoint) {
+        return this.request(endpoint, {
+            method: 'DELETE'
         });
     }
 }

@@ -67,7 +67,6 @@ public class SubscriberService {
 
         // Строгая проверка на уникальность мобильного номера телефона
         if (cleanMobile != null && !cleanMobile.isEmpty()) {
-            // Ищем абонента с таким же очищенным номером
             List<Subscriber> existingWithMobile = subscriberRepository.findByCleanMobilePhoneNumber(cleanMobile);
             if (!existingWithMobile.isEmpty()) {
                 throw new RuntimeException("Абонент с мобильным телефоном " + mobilePhoneNumber +
@@ -129,25 +128,25 @@ public class SubscriberService {
         validatePhoneUniqueness(subscriber, id);
 
         // Обновляем поля
-        if (subscriber.getIdUser() != null) {
+        if (subscriber.getIdUser() != null && subscriber.getIdUser().getId() != null) {
             User user = userService.findById(subscriber.getIdUser().getId())
                     .orElseThrow(() -> new RuntimeException("Пользователь не найден"));
             existingSubscriber.setIdUser(user);
         }
 
-        if (subscriber.getIdPost() != null) {
+        if (subscriber.getIdPost() != null && subscriber.getIdPost().getId() != null) {
             Post post = postService.findById(subscriber.getIdPost().getId())
                     .orElseThrow(() -> new RuntimeException("Должность не найдена"));
             existingSubscriber.setIdPost(post);
         }
 
-        if (subscriber.getIdDivision() != null) {
+        if (subscriber.getIdDivision() != null && subscriber.getIdDivision().getId() != null) {
             Division division = divisionService.findById(subscriber.getIdDivision().getId())
                     .orElseThrow(() -> new RuntimeException("Отдел не найден"));
             existingSubscriber.setIdDivision(division);
         }
 
-        if (subscriber.getIdBuilding() != null) {
+        if (subscriber.getIdBuilding() != null && subscriber.getIdBuilding().getId() != null) {
             Building building = buildingService.findById(subscriber.getIdBuilding().getId())
                     .orElseThrow(() -> new RuntimeException("Здание не найдено"));
             existingSubscriber.setIdBuilding(building);
