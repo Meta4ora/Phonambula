@@ -2,35 +2,42 @@ const API_BASE_URL = 'http://localhost:58080';
 
 class ApiClient {
     constructor() {
-        this.token = localStorage.getItem('token');
+        // больше не храним this.token здесь
     }
 
     setToken(token) {
-        this.token = token;
         localStorage.setItem('token', token);
     }
 
     clearToken() {
-        this.token = null;
         localStorage.removeItem('token');
     }
 
+    getToken() {
+        return localStorage.getItem('token');
+    }
+
     async request(endpoint, options = {}) {
-        const url = `${API_BASE_URL}${endpoint}`;
+        const url = `${API_BASE_URL}${endpoint.startsWith('/') ? '' : '/'}${endpoint}`;
+
         const headers = {
             'Content-Type': 'application/json',
             ...options.headers
         };
+
+        const token = this.getToken();
+        if (token) {
+            headers['Authorization'] = `Bearer ${token}`;
+            console.log(`[API] → Authorization: Bearer ... добавлен для ${endpoint}`);
+        } else {
+            console.warn(`[API] Токен НЕ НАЙДЕН для ${endpoint}`);
+        }
 
         const config = {
             ...options,
             headers,
             credentials: 'include'
         };
-
-        if (this.token) {
-            headers['Authorization'] = `Bearer ${this.token}`;
-        }
 
         const response = await fetch(url, config);
 
@@ -40,13 +47,18 @@ class ApiClient {
             throw new Error('Unauthorized');
         }
 
-        // Если тело пустое, не пытаться делать JSON
         if (response.status === 204) return null;
 
-        const data = await response.json();
+        let data;
+        try {
+            data = await response.json();
+        } catch {
+            data = {};
+        }
 
         if (!response.ok) {
-            throw new Error(data.message || 'Request failed');
+            const errMsg = data.message || data.error || `HTTP ${response.status}`;
+            throw new Error(errMsg);
         }
 
         return data;
@@ -71,9 +83,7 @@ class ApiClient {
     }
 
     async delete(endpoint) {
-        return this.request(endpoint, {
-            method: 'DELETE'
-        });
+        return this.request(endpoint, { method: 'DELETE' });
     }
 }
 

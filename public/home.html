@@ -11,36 +11,99 @@
 
     <div class="contacts-container">
         <div class="contacts-sidebar">
-            <h3>Контакты</h3>
+            <div class="sidebar-header">
+                <h3>Контакты</h3>
+                
+            </div>
+            <button onclick="openAddEmployeeModal()" id="addEmployeeBtn" class="add-employee-btn">
+                    Добавить сотрудника
+                </button>
             <ul class="contact-tree">
-                <li>
-                    <div class="category expanded" onclick="toggleCategory(this)">Вы</div>
-                    <ul class="sub-list">
-                        <li class="contact-item active" onclick="selectContact(this, 'self')">Петров Петр Петрович</li>
-                    </ul>
-                </li>
-                
-                <li>
-                    <div class="category expanded" onclick="toggleCategory(this)">Избранное</div>
-                    <ul class="sub-list">
-                        <li class="contact-item" onclick="selectContact(this, 'favorite')">Рината Абдурахманова</li>
-                    </ul>
-                </li>
-                
-                <li>
-                    <div class="category expanded" onclick="toggleCategory(this)">А</div>
-                    <ul class="sub-list">
-                        <li class="contact-item" onclick="selectContact(this, 'abu')">Данте Каллиопа</li>
-                        <li class="contact-item" onclick="selectContact(this, 'abdur')">Абдурахмед Ашотович</li>
-                    </ul>
-                </li>
+                <!-- Динамическое содержимое -->
             </ul>
         </div>
 
         <div class="contact-details" id="contactDetails"></div>
     </div>
 
+    <!-- Модальное окно для добавления сотрудника -->
+    <div id="addEmployeeModal" class="modal" style="display: none;">
+        <div class="modal-content add-employee-modal">
+            <h3>Добавление сотрудника</h3>
+            
+            <div class="modal-form">
+                <div class="form-group">
+                    <label>ФИО *</label>
+                    <input type="text" id="empName" placeholder="Иванов Иван Иванович" required>
+                    <input type="text" id="empSurname" placeholder="Фамилия">
+                    <input type="text" id="empPatronymic" placeholder="Отчество">
+                </div>
+
+                <div class="form-group">
+                    <label>Логин (телефон) *</label>
+                    <input type="text" id="empLogin" placeholder="+7 (999) 123-45-67" required>
+                </div>
+
+                <div class="form-group">
+                    <label>Пароль *</label>
+                    <input type="password" id="empPassword" placeholder="Введите пароль" required>
+                </div>
+
+                <div class="form-group">
+                    <label>Подтверждение пароля *</label>
+                    <input type="password" id="empConfirmPassword" placeholder="Подтвердите пароль" required>
+                </div>
+
+                <div class="form-group">
+                    <label>Роль</label>
+                    <select id="empRole"></select>
+                </div>
+
+                <div class="form-group">
+                    <label>Должность</label>
+                    <select id="empPosition"></select>
+                </div>
+
+                <div class="form-group">
+                    <label>Отдел</label>
+                    <select id="empDivision"></select>
+                </div>
+
+                <div class="form-group">
+                    <label>Корпус</label>
+                    <select id="empBuilding"></select>
+                </div>
+
+                <div class="form-group">
+                    <label>Мобильный телефон</label>
+                    <input type="text" id="empMobilePhone" placeholder="+7 (999) 123-45-67">
+                </div>
+
+                <div class="form-group">
+                    <label>Городской телефон</label>
+                    <input type="text" id="empLandlinePhone" placeholder="(495) 123-45-67">
+                </div>
+
+                <div class="form-group">
+                    <label>Внутренний телефон</label>
+                    <input type="text" id="empInternalPhone" placeholder="1234">
+                </div>
+
+                <div class="form-group">
+                    <label>Кабинет</label>
+                    <input type="text" id="empCabinet" placeholder="101">
+                </div>
+            </div>
+
+            <div class="modal-buttons">
+                <button class="modal-save" onclick="saveNewEmployee()">Сохранить</button>
+                <button class="modal-cancel" onclick="closeAddEmployeeModal()">Отмена</button>
+            </div>
+        </div>
+    </div>
+
     <script src="js/api.js"></script>
     <script src="js/home.js"></script>
+
 </body>
 </html>

@@ -4,13 +4,7 @@
     box-sizing: border-box;
 }
 
-@font-face {
-    font-family: 'BeerMoney';
-    src: url('../fonts/beermoney.ttf') format('truetype');
-    font-weight: normal;
-    font-style: normal;
-    font-display: swap;
-}
+
 
 body {
     min-height: 100vh;
