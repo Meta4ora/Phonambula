@@ -305,11 +305,11 @@ jobs:
             "password": "test123",
             "roleId": 2
           }
-      EOF
-      )
-          
-          echo "Sending minimal registration request..."
-          echo "Data: $REGISTER_DATA_MIN"
+          EOF
+          )
+              
+              echo "Sending minimal registration request..."
+              echo "Data: $REGISTER_DATA_MIN"
           
           REGISTER_RESPONSE2=$(curl -s -w "\nHTTP_CODE:%{http_code}" -X POST http://localhost:$HOST_PORT/auth/register \
             -H "Content-Type: application/json" \
