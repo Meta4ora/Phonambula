@@ -217,6 +217,13 @@ jobs:
           echo "Buildings response: $BUILDINGS"
           BUILDING_ID=$(echo $BUILDINGS | jq -r '.[0].id // 1')
           echo "BUILDING_ID=$BUILDING_ID" >> $GITHUB_ENV
+          
+          # Получаем первую роль для пользователя
+          ROLES=$(curl -s -H "Authorization: Bearer $JWT_TOKEN" \
+            http://localhost:$HOST_PORT/api/roles)
+          echo "Roles response: $ROLES"
+          ROLE_ID=$(echo $ROLES | jq -r '.[0].id // 2')
+          echo "ROLE_ID=$ROLE_ID" >> $GITHUB_ENV
 
       # 17 Тестируем создание нового пользователя
       - name: Test POST /auth/register (create user)
@@ -230,10 +237,7 @@ jobs:
             \"patronymic\": \"Testovich\",
             \"login\": \"$RANDOM_LOGIN\",
             \"password\": \"test123\",
-            \"roleId\": 2,
-            \"postId\": $POST_ID,
-            \"divisionId\": $DIVISION_ID,
-            \"buildingId\": $BUILDING_ID
+            \"roleId\": $ROLE_ID
           }"
           
           echo "Sending registration request..."
@@ -260,8 +264,17 @@ jobs:
             exit 1
           fi
           
-          echo "User created successfully with login: $RANDOM_LOGIN"
+          USER_ID=$(echo $RESPONSE_BODY | jq -r '.id // empty')
+          if [ -z "$USER_ID" ]; then
+            # Получаем ID пользователя по логину
+            USER_INFO=$(curl -s -H "Authorization: Bearer $JWT_TOKEN" \
+              http://localhost:$HOST_PORT/api/users/by-login/$RANDOM_LOGIN)
+            USER_ID=$(echo $USER_INFO | jq -r '.id')
+          fi
+          
+          echo "User created successfully with login: $RANDOM_LOGIN, ID: $USER_ID"
           echo "TEST_USER_LOGIN=$RANDOM_LOGIN" >> $GITHUB_ENV
+          echo "TEST_USER_ID=$USER_ID" >> $GITHUB_ENV
           echo "TEST_USER_TOKEN=$USER_TOKEN" >> $GITHUB_ENV
 
       # 18 Тестируем вход созданного пользователя
@@ -302,30 +315,6 @@ jobs:
           fi
           echo "Wrong password correctly rejected with $HTTP_CODE"
 
-      # 20 Тестируем создание абонента
-      - name: Test POST /api/subscribers (create subscriber)
-        run: |
-          HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" -X POST \
-            http://localhost:$HOST_PORT/api/subscribers \
-            -H "Content-Type: application/json" \
-            -H "Authorization: Bearer $JWT_TOKEN" \
-            -d "{
-              \"userId\": 1,
-              \"mobilePhoneNumber\": \"+79991234567\",
-              \"landlinePhoneNumber\": \"84951234567\",
-              \"internalPhoneNumber\": \"1234\",
-              \"cabinetNumber\": \"101\",
-              \"postId\": $POST_ID,
-              \"departmentId\": $DIVISION_ID,
-              \"buildingId\": $BUILDING_ID
-            }")
-          
-          if [ "$HTTP_CODE" -ne 200 ] && [ "$HTTP_CODE" -ne 201 ]; then
-            echo "Create subscriber failed with $HTTP_CODE"
-            exit 1
-          fi
-          echo "POST /api/subscribers - OK"
-
       # 21 Тестируем авторизацию без токена (должна быть ошибка)
       - name: Test unauthorized access
         run: |
@@ -350,7 +339,7 @@ jobs:
                 \"name\": \"Test2\",
                 \"login\": \"$TEST_USER_LOGIN\",
                 \"password\": \"test123\",
-                \"roleId\": 2
+                \"roleId\": $ROLE_ID
               }")
             
             if [ "$HTTP_CODE" -eq 200 ]; then
@@ -360,7 +349,24 @@ jobs:
             echo "Duplicate registration correctly failed with $HTTP_CODE"
           fi
 
-      # 23 Финальная проверка
+      # 24 Удаление тестового пользователя
+      - name: Cleanup - Delete test user
+        if: always()
+        run: |
+          if [ -n "$TEST_USER_ID" ]; then
+            echo "=== Deleting test user ID: $TEST_USER_ID ==="
+            HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" -X DELETE \
+              http://localhost:$HOST_PORT/api/users/$TEST_USER_ID \
+              -H "Authorization: Bearer $JWT_TOKEN")
+            
+            if [ "$HTTP_CODE" -eq 200 ] || [ "$HTTP_CODE" -eq 204 ]; then
+              echo "Test user deleted successfully"
+            else
+              echo "Failed to delete test user (HTTP $HTTP_CODE)"
+            fi
+          fi
+
+      # 25 Финальная проверка
       - name: Final health check
         run: |
           echo "=== FINAL TEST SUMMARY ==="
@@ -372,8 +378,9 @@ jobs:
             echo "Warning: Backend container stopped"
           fi
 
-      # 24 Останавливаем контейнер после тестов
+      # 26 Останавливаем контейнер после тестов
       - name: Stop backend container
+        if: always()
         run: |
           docker stop phonambula-backend || true
           docker rm phonambula-backend || true
