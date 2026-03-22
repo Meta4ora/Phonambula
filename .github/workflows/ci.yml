@@ -242,18 +242,40 @@ jobs:
           echo "Duplicate registration correctly failed with $HTTP_CODE"
 
       # 17 Тестируем вход созданного пользователя
-      - name: Test POST /auth/login (new user)
+      # 15 Тестируем создание нового пользователя
+      - name: Test POST /auth/register (create user)
         run: |
-          LOGIN_RESPONSE=$(curl -s -X POST http://localhost:$HOST_PORT/auth/login \
+          RANDOM_LOGIN="testuser_$(date +%s)_$RANDOM"
+          REGISTER_RESPONSE=$(curl -s -X POST http://localhost:$HOST_PORT/auth/register \
             -H "Content-Type: application/json" \
-            -d "{\"login\":\"$TEST_USER_LOGIN\",\"password\":\"test123\"}")
+            -d "{
+              \"surname\": \"Testov\",
+              \"name\": \"Test\",
+              \"patronymic\": \"Testovich\",
+              \"login\": \"$RANDOM_LOGIN\",
+              \"password\": \"test123\",
+              \"roleId\": 2,
+              \"postId\": 1,
+              \"divisionId\": 1,
+              \"buildingId\": 1,
+              \"mobilePhoneNumber\": \"+79991234567\",
+              \"landlinePhoneNumber\": \"84951234567\",
+              \"internalPhoneNumber\": \"1234\",
+              \"cabinetNumber\": \"101\"
+            }")
           
-          TOKEN=$(echo $LOGIN_RESPONSE | jq -r '.token')
-          if [ "$TOKEN" = "null" ] || [ -z "$TOKEN" ]; then
-            echo "Failed to login with new user"
+          echo "Register response: $REGISTER_RESPONSE"
+          
+          USER_TOKEN=$(echo $REGISTER_RESPONSE | jq -r '.token')
+          if [ "$USER_TOKEN" = "null" ] || [ -z "$USER_TOKEN" ]; then
+            echo "Failed to register user"
+            echo "Response: $REGISTER_RESPONSE"
             exit 1
           fi
-          echo "New user login successful"
+          
+          echo "User created with login: $RANDOM_LOGIN"
+          echo "TEST_USER_LOGIN=$RANDOM_LOGIN" >> $GITHUB_ENV
+          echo "TEST_USER_TOKEN=$USER_TOKEN" >> $GITHUB_ENV
 
       # 18 Тестируем попытку входа с неверным паролем
       - name: Test POST /auth/login (wrong password - should fail)
