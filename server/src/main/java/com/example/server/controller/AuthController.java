@@ -54,28 +54,34 @@ public class AuthController {
     @PostMapping("/register")
     @Transactional
     public ResponseEntity<?> register(@RequestBody RegisterRequest request) {
+        
+        System.out.println("Register request received: " + request);
+        System.out.println("Mobile phone: " + request.getMobilePhoneNumber());
+        System.out.println("Landline phone: " + request.getLandlinePhoneNumber());
+        System.out.println("Internal phone: " + request.getInternalPhoneNumber());
+        System.out.println("Cabinet: " + request.getCabinetNumber());
 
         // 1️⃣ создаём пользователя
         User user = userService.createUser(
-                request.getSurname(),
-                request.getName(),
-                request.getPatronymic(),
+                request.getSurname() != null ? request.getSurname() : "",
+                request.getName() != null ? request.getName() : "",
+                request.getPatronymic() != null ? request.getPatronymic() : "",
                 request.getLogin(),
                 request.getPassword(),
                 request.getRoleId()
         );
 
-        // 2️⃣ создаём subscriber
+        // 2️⃣ создаём subscriber со всеми полями
         subscriberService.createSubscriber(
                 user.getId(),
                 request.getPostId(),
                 request.getDivisionId(),
                 request.getBuildingId(),
-                null,
-                "",
-                "",
-                "",
-                ""
+                null, // dateBirth
+                request.getCabinetNumber() != null ? request.getCabinetNumber() : "",
+                request.getInternalPhoneNumber() != null ? request.getInternalPhoneNumber() : "",
+                request.getLandlinePhoneNumber() != null ? request.getLandlinePhoneNumber() : "",
+                request.getMobilePhoneNumber() != null ? request.getMobilePhoneNumber() : ""
         );
 
         // 3️⃣ выдаём JWT сразу после регистрации
@@ -108,5 +114,11 @@ public class AuthController {
         private Integer postId;
         private Integer divisionId;
         private Integer buildingId;
+        
+        // Добавляем поля для телефонов и кабинета
+        private String mobilePhoneNumber;
+        private String landlinePhoneNumber;
+        private String internalPhoneNumber;
+        private String cabinetNumber;
     }
 }
