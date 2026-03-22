@@ -1,5 +1,15 @@
 let contactsData = {};
 let editedContactId = null;
+let currentUserRole = null; // Добавляем переменную для роли
+
+// Функция для проверки, является ли пользователь администратором
+function isAdmin() {
+    console.log('Current user role:', currentUserRole); // Для отладки
+    
+    // Проверяем различные варианты названия роли
+    return currentUserRole === 'Администратор' || 
+           currentUserRole === 'ROLE_Администратор';
+}
 
 async function loadMyContacts() {
     try {
@@ -8,11 +18,36 @@ async function loadMyContacts() {
         data.forEach(contact => {
             contactsData[contact.id] = contact;
         });
+        
+        // Загружаем роль текущего пользователя, если еще не загружена
+        if (!currentUserRole) {
+            // Получаем роль из localStorage
+            currentUserRole = localStorage.getItem('userRole');
+            
+            // Если роль не сохранена, можно получить из API
+            if (!currentUserRole) {
+                try {
+                    const userInfo = await api.get('/api/users/me');
+                    currentUserRole = userInfo.role;
+                    localStorage.setItem('userRole', currentUserRole);
+                } catch (err) {
+                    console.error('Не удалось получить роль пользователя', err);
+                }
+            }
+        }
+        
         rebuildContactTree();
         const firstKey = Object.keys(contactsData)[0];
         if (firstKey) {
             showContactDetails(firstKey);
         }
+        
+        // Показываем или скрываем кнопку добавления сотрудника
+        const addEmployeeBtn = document.getElementById('addEmployeeBtn');
+        if (addEmployeeBtn) {
+            addEmployeeBtn.style.display = isAdmin() ? 'block' : 'none';
+        }
+        
     } catch (err) {
         console.error("Ошибка загрузки контактов:", err);
         alert('Не удалось загрузить контакты');
@@ -48,10 +83,15 @@ function rebuildContactTree() {
         `;
 
         grouped[letter].forEach(contact => {
+            // Кнопка удаления только для администраторов
+            const deleteButton = isAdmin() 
+                ? `<button class="delete-btn" onclick="deleteContact(event,'${contact.id}')">Удалить</button>`
+                : '';
+                
             html += `
                 <li class="contact-item" onclick="selectContact(this,'${contact.id}')">
                     ${contact.name || '—'}
-                    <button class="delete-btn" onclick="deleteContact(event,'${contact.id}')">Удалить</button>
+                    ${deleteButton}
                 </li>
             `;
         });
@@ -87,6 +127,14 @@ function showContactDetails(contactId) {
     const detailsDiv = document.getElementById('contactDetails');
     if (!detailsDiv) return;
 
+    // Определяем, видимы ли кнопки редактирования
+    const showEditButtons = isAdmin();
+    
+    // Формируем кнопки изменения для справочников
+    const editButtonHtml = (field, id, name) => showEditButtons 
+        ? `<button class="edit-btn" onclick="editReference('${field}', ${id || 'null'}, '${(name || '').replace(/'/g,"\\'")}')">Изменить</button>`
+        : '';
+
     detailsDiv.innerHTML = `
     <h2>${c.name || '—'}</h2>
 
@@ -95,30 +143,30 @@ function showContactDetails(contactId) {
 
         <div class="detail-item">
             <div class="detail-label">Мобильный</div>
-            <div class="detail-value clickable"
+            <div class="detail-value ${showEditButtons ? 'clickable' : ''}"
                  data-field="mobilePhone"
                  data-original="${c.mobilePhone || ''}"
-                 onclick="makeEditable(this, 'mobilePhone')">
+                 ${showEditButtons ? `onclick="makeEditable(this, 'mobilePhone')"` : ''}>
                 ${c.mobilePhone || '—'}
             </div>
         </div>
 
         <div class="detail-item">
             <div class="detail-label">Городской</div>
-            <div class="detail-value clickable"
+            <div class="detail-value ${showEditButtons ? 'clickable' : ''}"
                  data-field="landlinePhone"
                  data-original="${c.landlinePhone || ''}"
-                 onclick="makeEditable(this, 'landlinePhone')">
+                 ${showEditButtons ? `onclick="makeEditable(this, 'landlinePhone')"` : ''}>
                 ${c.landlinePhone || '—'}
             </div>
         </div>
 
         <div class="detail-item">
             <div class="detail-label">Внутренний</div>
-            <div class="detail-value clickable"
+            <div class="detail-value ${showEditButtons ? 'clickable' : ''}"
                  data-field="internalPhone"
                  data-original="${c.internalPhone || ''}"
-                 onclick="makeEditable(this, 'internalPhone')">
+                 ${showEditButtons ? `onclick="makeEditable(this, 'internalPhone')"` : ''}>
                 ${c.internalPhone || '—'}
             </div>
         </div>
@@ -135,10 +183,7 @@ function showContactDetails(contactId) {
                      data-id="${c.positionId || ''}">
                     ${c.position || '—'}
                 </div>
-                <button class="edit-btn"
-                    onclick="editReference('position', ${c.positionId || 'null'}, '${(c.position || '').replace(/'/g,"\\'")}')">
-                    Изменить
-                </button>
+                ${editButtonHtml('position', c.positionId, c.position)}
             </div>
         </div>
 
@@ -150,10 +195,7 @@ function showContactDetails(contactId) {
                      data-id="${c.departmentId || ''}">
                     ${c.department || '—'}
                 </div>
-                <button class="edit-btn"
-                    onclick="editReference('department', ${c.departmentId || 'null'}, '${(c.department || '').replace(/'/g,"\\'")}')">
-                    Изменить
-                </button>
+                ${editButtonHtml('department', c.departmentId, c.department)}
             </div>
         </div>
 
@@ -165,25 +207,22 @@ function showContactDetails(contactId) {
                      data-id="${c.buildingId || ''}">
                     ${c.building || '—'}
                 </div>
-                <button class="edit-btn"
-                    onclick="editReference('building', ${c.buildingId || 'null'}, '${(c.building || '').replace(/'/g,"\\'")}')">
-                    Изменить
-                </button>
+                ${editButtonHtml('building', c.buildingId, c.building)}
             </div>
         </div>
 
         <div class="detail-item">
             <div class="detail-label">Кабинет</div>
-            <div class="detail-value clickable"
+            <div class="detail-value ${showEditButtons ? 'clickable' : ''}"
                  data-field="cabinet"
                  data-original="${c.cabinet || ''}"
-                 onclick="makeEditable(this, 'cabinet')">
+                 ${showEditButtons ? `onclick="makeEditable(this, 'cabinet')"` : ''}>
                 ${c.cabinet || '—'}
             </div>
         </div>
     </div>
 
-    <!-- кнопка сохранения остаётся -->
+    <!-- кнопка сохранения только для администраторов -->
     <div class="save-button-container">
         <button id="saveBtn" style="display:none;" onclick="saveContact()">Сохранить изменения</button>
     </div>
@@ -361,6 +400,10 @@ function showSaveBtn() {
 }
 
 async function saveContact() {
+    if (!isAdmin()) {
+        alert('У вас нет прав для редактирования контактов');
+        return;
+    }
     if (!editedContactId) return;
 
     const container = document.getElementById('contactDetails');
@@ -421,16 +464,19 @@ async function saveContact() {
     }
 }
 
-async function deleteContact(event,id) {
-
+async function deleteContact(event, id) {
     event.stopPropagation();
+    
+    // Проверяем права
+    if (!isAdmin()) {
+        alert('У вас нет прав для удаления контактов');
+        return;
+    }
 
     if (!confirm('Удалить контакт?')) return;
 
     try {
-
         await api.delete(`/api/subscribers/${id}`);
-
         alert('Контакт удалён');
 
         if (String(id) === String(editedContactId)) {
@@ -438,9 +484,7 @@ async function deleteContact(event,id) {
         }
 
         await loadMyContacts();
-
     } catch (err) {
-
         console.error(err);
         alert('Ошибка удаления');
     }
@@ -519,6 +563,11 @@ async function loadReferenceDataForModal() {
 
 
 async function saveNewEmployee() {
+
+    if (!isAdmin()) {
+        alert('У вас нет прав для добавления сотрудников');
+        return;
+    }
     // Проверка паролей
     const password = document.getElementById('empPassword').value;
     const confirmPassword = document.getElementById('empConfirmPassword').value;
@@ -599,10 +648,28 @@ async function saveNewEmployee() {
     }
 }
 
-window.addEventListener('DOMContentLoaded', () => {
+window.addEventListener('DOMContentLoaded', async () => {
     if (!api.isAuthenticated()) {
         window.location.href = '/login.html';
-    } else {
-        loadMyContacts();
+        return;
     }
+    
+    try {
+        // Всегда получаем актуальную роль из API
+        const userInfo = await api.get('/api/users/me');
+        currentUserRole = userInfo.role;
+        localStorage.setItem('userRole', currentUserRole);
+        console.log('Current user role from API:', currentUserRole);
+    } catch (err) {
+        console.error('Failed to get user role:', err);
+        // Если не удалось получить роль, пробуем из localStorage
+        currentUserRole = localStorage.getItem('userRole');
+        if (!currentUserRole) {
+            alert('Ошибка загрузки данных пользователя');
+            window.location.href = '/login.html';
+            return;
+        }
+    }
+    
+    loadMyContacts();
 });

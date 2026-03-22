@@ -39,9 +39,11 @@ async function handleLogin() {
         });
 
         api.setToken(data.token);
-
-        localStorage.setItem('userName', data.name);
+        
+        // Сохраняем роль пользователя
+        localStorage.setItem('userName', data.login);
         localStorage.setItem('userLogin', data.login);
+        localStorage.setItem('userRole', data.role); // Сохраняем роль
 
         window.location.href = '/home.html';
 
