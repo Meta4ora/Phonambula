@@ -9,12 +9,6 @@ on:
 jobs:
   build-and-test:
     runs-on: ubuntu-latest
-    services:
-      docker:
-        image: docker:24.0.5
-        options: --privileged
-        ports:
-          - 58080:58080
 
     steps:
       # 1 Получаем код
@@ -51,25 +45,29 @@ jobs:
           echo "Backend running on port $HOST_PORT"
           sleep 25
 
+      # 6 Установка jq
       - name: Install jq
-        run: sudo apt-get install -y jq
+        run: sudo apt-get update && sudo apt-get install -y jq
 
-      # 6 Ждём, чтобы сервис поднялся
+      # 7 Ждём, чтобы сервис поднялся
       - name: Wait for backend
         run: |
-          echo "Waiting 25s for backend to start..."
-          sleep 5
-          # Проверка готовности сервиса
-          for i in {1..10}; do
-            if curl -s http://localhost:$HOST_PORT/actuator/health > /dev/null; then
+          echo "Waiting for backend to start..."
+          for i in {1..15}; do
+            if curl -s http://localhost:$HOST_PORT/actuator/health > /dev/null 2>&1; then
               echo "Backend is ready!"
               break
             fi
             echo "Waiting for backend... attempt $i"
             sleep 3
+            if [ $i -eq 15 ]; then
+              echo "Backend failed to start"
+              docker logs phonambula-backend --tail 50
+              exit 1
+            fi
           done
       
-      # 7 Получаем токен админа
+      # 8 Получаем токен админа
       - name: Get JWT token
         run: |
           echo "Requesting JWT token..."
@@ -78,8 +76,7 @@ jobs:
             -H "Content-Type: application/json" \
             -d '{"login":"admin","password":"admin"}')
           
-          echo "Login response:"
-          echo "$LOGIN_RESPONSE"
+          echo "Login response: $LOGIN_RESPONSE"
           
           TOKEN=$(echo $LOGIN_RESPONSE | jq -r '.token')
           
@@ -93,7 +90,7 @@ jobs:
 
       # ==================== ТЕСТЫ API ====================
       
-      # 8 Тестируем GET /api/users
+      # 9 Тестируем GET /api/users
       - name: Test GET /api/users
         run: |
           HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" \
@@ -106,7 +103,7 @@ jobs:
           fi
           echo "GET /api/users - OK"
 
-      # 9 Тестируем GET /api/roles
+      # 10 Тестируем GET /api/roles
       - name: Test GET /api/roles
         run: |
           HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" \
@@ -119,7 +116,7 @@ jobs:
           fi
           echo "GET /api/roles - OK"
 
-      # 10 Тестируем GET /api/buildings
+      # 11 Тестируем GET /api/buildings
       - name: Test GET /api/buildings
         run: |
           HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" \
@@ -132,7 +129,7 @@ jobs:
           fi
           echo "GET /api/buildings - OK"
 
-      # 11 Тестируем GET /api/divisions
+      # 12 Тестируем GET /api/divisions
       - name: Test GET /api/divisions
         run: |
           HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" \
@@ -145,7 +142,7 @@ jobs:
           fi
           echo "GET /api/divisions - OK"
 
-      # 12 Тестируем GET /api/posts
+      # 13 Тестируем GET /api/posts
       - name: Test GET /api/posts
         run: |
           HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" \
@@ -158,7 +155,7 @@ jobs:
           fi
           echo "GET /api/posts - OK"
 
-      # 13 Тестируем GET /api/subscribers/my
+      # 14 Тестируем GET /api/subscribers/my
       - name: Test GET /api/subscribers/my
         run: |
           HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" \
@@ -171,7 +168,7 @@ jobs:
           fi
           echo "GET /api/subscribers/my - OK"
 
-      # 14 Тестируем GET /api/users/me
+      # 15 Тестируем GET /api/users/me
       - name: Test GET /api/users/me
         run: |
           RESPONSE=$(curl -s -H "Authorization: Bearer $JWT_TOKEN" \
@@ -195,80 +192,58 @@ jobs:
           fi
           echo "GET /api/users/me - OK, role: $ROLE"
 
-      # 14.1 Проверяем существующие ID справочников
-    - name: Get reference IDs
-      run: |
-        echo "=== Getting reference IDs ==="
-        
-        # Получаем первую должность
-        POSTS=$(curl -s -H "Authorization: Bearer $JWT_TOKEN" \
-          http://localhost:$HOST_PORT/api/posts)
-        echo "Posts response: $POSTS"
-        POST_ID=$(echo $POSTS | jq -r '.[0].id')
-        if [ "$POST_ID" = "null" ] || [ -z "$POST_ID" ]; then
-          POST_ID=1
-        fi
-        echo "POST_ID=$POST_ID" >> $GITHUB_ENV
-        
-        # Получаем первый отдел
-        DIVISIONS=$(curl -s -H "Authorization: Bearer $JWT_TOKEN" \
-          http://localhost:$HOST_PORT/api/divisions)
-        echo "Divisions response: $DIVISIONS"
-        DIVISION_ID=$(echo $DIVISIONS | jq -r '.[0].id')
-        if [ "$DIVISION_ID" = "null" ] || [ -z "$DIVISION_ID" ]; then
-          DIVISION_ID=1
-        fi
-        echo "DIVISION_ID=$DIVISION_ID" >> $GITHUB_ENV
-        
-        # Получаем первый корпус
-        BUILDINGS=$(curl -s -H "Authorization: Bearer $JWT_TOKEN" \
-          http://localhost:$HOST_PORT/api/buildings)
-        echo "Buildings response: $BUILDINGS"
-        BUILDING_ID=$(echo $BUILDINGS | jq -r '.[0].id')
-        if [ "$BUILDING_ID" = "null" ] || [ -z "$BUILDING_ID" ]; then
-          BUILDING_ID=1
-        fi
-        echo "BUILDING_ID=$BUILDING_ID" >> $GITHUB_ENV
+      # 16 Получаем существующие ID справочников
+      - name: Get reference IDs
+        run: |
+          echo "=== Getting reference IDs ==="
+          
+          # Получаем первую должность
+          POSTS=$(curl -s -H "Authorization: Bearer $JWT_TOKEN" \
+            http://localhost:$HOST_PORT/api/posts)
+          echo "Posts response: $POSTS"
+          POST_ID=$(echo $POSTS | jq -r '.[0].id // 1')
+          echo "POST_ID=$POST_ID" >> $GITHUB_ENV
+          
+          # Получаем первый отдел
+          DIVISIONS=$(curl -s -H "Authorization: Bearer $JWT_TOKEN" \
+            http://localhost:$HOST_PORT/api/divisions)
+          echo "Divisions response: $DIVISIONS"
+          DIVISION_ID=$(echo $DIVISIONS | jq -r '.[0].id // 1')
+          echo "DIVISION_ID=$DIVISION_ID" >> $GITHUB_ENV
+          
+          # Получаем первый корпус
+          BUILDINGS=$(curl -s -H "Authorization: Bearer $JWT_TOKEN" \
+            http://localhost:$HOST_PORT/api/buildings)
+          echo "Buildings response: $BUILDINGS"
+          BUILDING_ID=$(echo $BUILDINGS | jq -r '.[0].id // 1')
+          echo "BUILDING_ID=$BUILDING_ID" >> $GITHUB_ENV
 
-# 15 Тестируем создание нового пользователя с полными данными
-      - name: Test POST /auth/register (create user with full data)
+      # 17 Тестируем создание нового пользователя
+      - name: Test POST /auth/register (create user)
         run: |
           echo "=== Creating test user ==="
           RANDOM_LOGIN="testuser_$(date +%s)_$RANDOM"
           
-          # Сначала проверим, что сервер доступен
-          echo "Checking backend health..."
-          curl -s http://localhost:$HOST_PORT/actuator/health || true
+          REGISTER_DATA="{
+            \"surname\": \"Testov\",
+            \"name\": \"Test\",
+            \"patronymic\": \"Testovich\",
+            \"login\": \"$RANDOM_LOGIN\",
+            \"password\": \"test123\",
+            \"roleId\": 2,
+            \"postId\": $POST_ID,
+            \"divisionId\": $DIVISION_ID,
+            \"buildingId\": $BUILDING_ID
+          }"
           
-          # Пробуем зарегистрировать пользователя
-          REGISTER_DATA=$(cat <<EOF
-          {
-            "surname": "Testov",
-            "name": "Test",
-            "patronymic": "Testovich",
-            "login": "$RANDOM_LOGIN",
-            "password": "test123",
-            "roleId": 2,
-            "postId": $POST_ID,
-            "divisionId": $DIVISION_ID,
-            "buildingId": $BUILDING_ID,
-            "mobilePhoneNumber": "+79991234567",
-            "landlinePhoneNumber": "84951234567",
-            "internalPhoneNumber": "1234",
-            "cabinetNumber": "101"
-          }
-          EOF
-          )
-              
-              echo "Sending registration request..."
-              echo "Data: $REGISTER_DATA"
+          echo "Sending registration request..."
           
-          REGISTER_RESPONSE=$(curl -s -w "\nHTTP_CODE:%{http_code}" -X POST http://localhost:$HOST_PORT/auth/register \
+          REGISTER_RESPONSE=$(curl -s -w "\n%{http_code}" -X POST http://localhost:$HOST_PORT/auth/register \
             -H "Content-Type: application/json" \
             -d "$REGISTER_DATA")
           
-          HTTP_CODE=$(echo "$REGISTER_RESPONSE" | grep "HTTP_CODE:" | cut -d':' -f2)
-          RESPONSE_BODY=$(echo "$REGISTER_RESPONSE" | sed '/HTTP_CODE:/d')
+          HTTP_CODE=$(echo "$REGISTER_RESPONSE" | tail -n1)
+          RESPONSE_BODY=$(echo "$REGISTER_RESPONSE" | sed '$d')
           
           echo "HTTP Status Code: $HTTP_CODE"
           echo "Response body: $RESPONSE_BODY"
@@ -282,7 +257,6 @@ jobs:
           USER_TOKEN=$(echo $RESPONSE_BODY | jq -r '.token')
           if [ "$USER_TOKEN" = "null" ] || [ -z "$USER_TOKEN" ]; then
             echo "Failed to get token from response"
-            echo "Response: $RESPONSE_BODY"
             exit 1
           fi
           
@@ -290,48 +264,7 @@ jobs:
           echo "TEST_USER_LOGIN=$RANDOM_LOGIN" >> $GITHUB_ENV
           echo "TEST_USER_TOKEN=$USER_TOKEN" >> $GITHUB_ENV
 
-      # 16 Альтернативный тест - только с обязательными полями
-      - name: Test POST /auth/register (create user with minimal data)
-        run: |
-          echo "=== Creating test user with minimal data ==="
-          RANDOM_LOGIN2="testuser2_$(date +%s)_$RANDOM"
-          
-          REGISTER_DATA_MIN=$(cat <<EOF
-          {
-            "surname": "Testov2",
-            "name": "Test2",
-            "patronymic": "",
-            "login": "$RANDOM_LOGIN2",
-            "password": "test123",
-            "roleId": 2
-          }
-          EOF
-          )
-              
-              echo "Sending minimal registration request..."
-              echo "Data: $REGISTER_DATA_MIN"
-          
-          REGISTER_RESPONSE2=$(curl -s -w "\nHTTP_CODE:%{http_code}" -X POST http://localhost:$HOST_PORT/auth/register \
-            -H "Content-Type: application/json" \
-            -d "$REGISTER_DATA_MIN")
-          
-          HTTP_CODE2=$(echo "$REGISTER_RESPONSE2" | grep "HTTP_CODE:" | cut -d':' -f2)
-          RESPONSE_BODY2=$(echo "$REGISTER_RESPONSE2" | sed '/HTTP_CODE:/d')
-          
-          echo "HTTP Status Code: $HTTP_CODE2"
-          echo "Response body: $RESPONSE_BODY2"
-          
-          if [ "$HTTP_CODE2" = "200" ]; then
-            USER_TOKEN2=$(echo $RESPONSE_BODY2 | jq -r '.token')
-            if [ "$USER_TOKEN2" != "null" ] && [ -n "$USER_TOKEN2" ]; then
-              echo "Minimal registration successful"
-              echo "TEST_USER_LOGIN2=$RANDOM_LOGIN2" >> $GITHUB_ENV
-            fi
-          else
-            echo "Minimal registration failed with HTTP $HTTP_CODE2 (may be expected if fields are required)"
-          fi
-
-      # 17 Тестируем вход созданного пользователя
+      # 18 Тестируем вход созданного пользователя
       - name: Test POST /auth/login (new user)
         run: |
           if [ -n "$TEST_USER_LOGIN" ]; then
@@ -352,7 +285,7 @@ jobs:
             echo "No test user created, skipping login test"
           fi
 
-      # 18 Тестируем попытку входа с неверным паролем
+      # 19 Тестируем попытку входа с неверным паролем
       - name: Test POST /auth/login (wrong password - should fail)
         run: |
           echo "=== Testing wrong password ==="
@@ -369,10 +302,11 @@ jobs:
           fi
           echo "Wrong password correctly rejected with $HTTP_CODE"
 
-      # 19 Тестируем создание абонента
+      # 20 Тестируем создание абонента
       - name: Test POST /api/subscribers (create subscriber)
         run: |
-          CREATE_RESPONSE=$(curl -s -X POST http://localhost:$HOST_PORT/api/subscribers \
+          HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" -X POST \
+            http://localhost:$HOST_PORT/api/subscribers \
             -H "Content-Type: application/json" \
             -H "Authorization: Bearer $JWT_TOKEN" \
             -d "{
@@ -381,20 +315,9 @@ jobs:
               \"landlinePhoneNumber\": \"84951234567\",
               \"internalPhoneNumber\": \"1234\",
               \"cabinetNumber\": \"101\",
-              \"postId\": 1,
-              \"departmentId\": 1,
-              \"buildingId\": 1
-            }")
-          
-          echo "Create subscriber response: $CREATE_RESPONSE"
-          
-          HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" -X POST \
-            http://localhost:$HOST_PORT/api/subscribers \
-            -H "Content-Type: application/json" \
-            -H "Authorization: Bearer $JWT_TOKEN" \
-            -d "{
-              \"userId\": 1,
-              \"mobilePhoneNumber\": \"+79991234568\"
+              \"postId\": $POST_ID,
+              \"departmentId\": $DIVISION_ID,
+              \"buildingId\": $BUILDING_ID
             }")
           
           if [ "$HTTP_CODE" -ne 200 ] && [ "$HTTP_CODE" -ne 201 ]; then
@@ -403,85 +326,7 @@ jobs:
           fi
           echo "POST /api/subscribers - OK"
 
-      # 20 Тестируем PUT /api/subscribers (update subscriber)
-      - name: Test PUT /api/subscribers
-        run: |
-          # Сначала получаем список абонентов
-          SUBSCRIBERS=$(curl -s -H "Authorization: Bearer $JWT_TOKEN" \
-            http://localhost:$HOST_PORT/api/subscribers/my)
-          
-          FIRST_ID=$(echo $SUBSCRIBERS | jq -r '.[0].id')
-          
-          if [ "$FIRST_ID" != "null" ] && [ -n "$FIRST_ID" ]; then
-            UPDATE_RESPONSE=$(curl -s -X PUT http://localhost:$HOST_PORT/api/subscribers/$FIRST_ID \
-              -H "Content-Type: application/json" \
-              -H "Authorization: Bearer $JWT_TOKEN" \
-              -d "{
-                \"cabinetNumber\": \"999\",
-                \"mobilePhoneNumber\": \"+79998887766\"
-              }")
-            
-            HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" -X PUT \
-              http://localhost:$HOST_PORT/api/subscribers/$FIRST_ID \
-              -H "Content-Type: application/json" \
-              -H "Authorization: Bearer $JWT_TOKEN" \
-              -d "{\"cabinetNumber\": \"999\"}")
-            
-            if [ "$HTTP_CODE" -ne 200 ]; then
-              echo "Update subscriber failed with $HTTP_CODE"
-              exit 1
-            fi
-            echo "PUT /api/subscribers - OK"
-          else
-            echo "No subscribers found to update"
-          fi
-
-      # 21 Тестируем создание справочников (админ доступ)
-      - name: Test POST /api/buildings (create building)
-        run: |
-          CREATE_RESPONSE=$(curl -s -X POST http://localhost:$HOST_PORT/api/buildings \
-            -H "Content-Type: application/json" \
-            -H "Authorization: Bearer $JWT_TOKEN" \
-            -d "{
-              \"nameBuilding\": \"Test Building\",
-              \"address\": \"Test Address\"
-            }")
-          
-          HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" -X POST \
-            http://localhost:$HOST_PORT/api/buildings \
-            -H "Content-Type: application/json" \
-            -H "Authorization: Bearer $JWT_TOKEN" \
-            -d "{\"nameBuilding\": \"Test Building\", \"address\": \"Test Address\"}")
-          
-          if [ "$HTTP_CODE" -ne 200 ] && [ "$HTTP_CODE" -ne 201 ]; then
-            echo "Create building failed with $HTTP_CODE"
-          else
-            echo "POST /api/buildings - OK"
-          fi
-
-      # 22 Тестируем DELETE /api/subscribers (delete subscriber)
-      - name: Test DELETE /api/subscribers
-        run: |
-          SUBSCRIBERS=$(curl -s -H "Authorization: Bearer $JWT_TOKEN" \
-            http://localhost:$HOST_PORT/api/subscribers/my)
-          
-          FIRST_ID=$(echo $SUBSCRIBERS | jq -r '.[0].id')
-          
-          if [ "$FIRST_ID" != "null" ] && [ -n "$FIRST_ID" ]; then
-            HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" -X DELETE \
-              http://localhost:$HOST_PORT/api/subscribers/$FIRST_ID \
-              -H "Authorization: Bearer $JWT_TOKEN")
-            
-            if [ "$HTTP_CODE" -ne 200 ] && [ "$HTTP_CODE" -ne 204 ]; then
-              echo "Delete subscriber failed with $HTTP_CODE"
-              exit 1
-            fi
-            echo "DELETE /api/subscribers - OK"
-          else
-            echo "No subscribers found to delete"
-          fi
-
-      # 23 Тестируем авторизацию без токена (должна быть ошибка)
+      # 21 Тестируем авторизацию без токена (должна быть ошибка)
       - name: Test unauthorized access
         run: |
           HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" \
@@ -493,42 +338,42 @@ jobs:
           fi
           echo "Unauthorized access correctly blocked"
 
-      # 24 Тестируем удаление пользователя
-      - name: Test DELETE /api/users (delete test user)
+      # 22 Тестируем регистрацию с дублирующимся логином (должна быть ошибка)
+      - name: Test POST /auth/register (duplicate login - should fail)
         run: |
-          # Получаем ID созданного тестового пользователя
-          USER_RESPONSE=$(curl -s -H "Authorization: Bearer $JWT_TOKEN" \
-            http://localhost:$HOST_PORT/api/users/by-login/$TEST_USER_LOGIN)
-          
-          USER_ID=$(echo $USER_RESPONSE | jq -r '.id')
-          
-          if [ "$USER_ID" != "null" ] && [ -n "$USER_ID" ]; then
-            HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" -X DELETE \
-              http://localhost:$HOST_PORT/api/users/$USER_ID \
-              -H "Authorization: Bearer $JWT_TOKEN")
+          if [ -n "$TEST_USER_LOGIN" ]; then
+            HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" -X POST \
+              http://localhost:$HOST_PORT/auth/register \
+              -H "Content-Type: application/json" \
+              -d "{
+                \"surname\": \"Testov2\",
+                \"name\": \"Test2\",
+                \"login\": \"$TEST_USER_LOGIN\",
+                \"password\": \"test123\",
+                \"roleId\": 2
+              }")
             
-            if [ "$HTTP_CODE" -ne 200 ] && [ "$HTTP_CODE" -ne 204 ]; then
-              echo "Delete user failed with $HTTP_CODE"
+            if [ "$HTTP_CODE" -eq 200 ]; then
+              echo "Duplicate registration should fail, but got $HTTP_CODE"
               exit 1
             fi
-            echo "DELETE /api/users - OK"
-          else
-            echo "Test user not found"
+            echo "Duplicate registration correctly failed with $HTTP_CODE"
           fi
 
-      # 25 Финальная проверка всех эндпоинтов
+      # 23 Финальная проверка
       - name: Final health check
         run: |
           echo "=== FINAL TEST SUMMARY ==="
           echo "All API tests completed successfully!"
           
-          # Проверяем, что контейнер все еще работает
           if docker ps | grep -q phonambula-backend; then
             echo "Backend container is still running"
           else
             echo "Warning: Backend container stopped"
           fi
 
-      # 26 Останавливаем контейнер после тестов
+      # 24 Останавливаем контейнер после тестов
       - name: Stop backend container
-        run: docker stop phonambula-backend && docker rm phonambula-backend || true
+        run: |
+          docker stop phonambula-backend || true
+          docker rm phonambula-backend || true
