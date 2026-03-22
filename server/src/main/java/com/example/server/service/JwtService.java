@@ -12,20 +12,15 @@ import java.util.Date;
 @Service
 public class JwtService {
 
-    private final String SECRET = "my-super-secret-key-my-super-secret-key";
-
-    private final long EXPIRATION = 1000 * 60 * 60 * 24;
-
-    private SecretKey getSigningKey() {
-        return Keys.hmacShaKeyFor(SECRET.getBytes());
-    }
+    private final SecretKey secretKey = Keys.secretKeyFor(SignatureAlgorithm.HS256);
+    private final long EXPIRATION = 1000 * 60 * 60 * 24; // 24 часа
 
     public String generateToken(String login) {
         return Jwts.builder()
                 .setSubject(login)
                 .setIssuedAt(new Date())
                 .setExpiration(new Date(System.currentTimeMillis() + EXPIRATION))
-                .signWith(getSigningKey(), SignatureAlgorithm.HS256)
+                .signWith(secretKey, SignatureAlgorithm.HS256)
                 .compact();
     }
 
@@ -38,14 +33,13 @@ public class JwtService {
             extractAllClaims(token);
             return true;
         } catch (Exception e) {
-            System.out.println("JWT VALIDATION ERROR: " + e.getMessage());
             return false;
         }
     }
 
     private Claims extractAllClaims(String token) {
         return Jwts.parserBuilder()
-                .setSigningKey(getSigningKey())
+                .setSigningKey(secretKey)
                 .build()
                 .parseClaimsJws(token)
                 .getBody();
