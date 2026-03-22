@@ -26,17 +26,38 @@ public class UserController {
         this.userService = userService;
     }
 
-    // ДОБАВЬТЕ ЭТОТ МЕТОД
+    // ================= МЕТОД ДЛЯ ПОЛУЧЕНИЯ ТЕКУЩЕГО ПОЛЬЗОВАТЕЛЯ (из второго файла) =================
+
+    /**
+     * Метод для получения текущего пользователя из контекста безопасности
+     */
+    private User getCurrentUser() {
+        Object principal = SecurityContextHolder.getContext().getAuthentication().getPrincipal();
+
+        // Проверяем, что principal это String (логин) и это не анонимный пользователь
+        if (principal instanceof String) {
+            String login = (String) principal;
+            if (!"anonymousUser".equals(login)) {
+                return userService.findByLogin(login)
+                        .orElse(null); // Возвращаем null вместо исключения
+            }
+        }
+
+        return null; // Возвращаем null для неаутентифицированных запросов
+    }
+
+    // ================= МЕТОД /me (из первого файла) =================
+
     @GetMapping("/me")
-    public ResponseEntity<?> getCurrentUser() {
+    public ResponseEntity<?> getCurrentUserEndpoint() {
         try {
             // Получаем текущего аутентифицированного пользователя
             Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
             String login = authentication.getName();
-            
+
             User user = userService.findByLogin(login)
                     .orElseThrow(() -> new RuntimeException("Пользователь не найден"));
-            
+
             Map<String, Object> response = new HashMap<>();
             response.put("id", user.getId());
             response.put("login", user.getLogin());
@@ -44,17 +65,19 @@ public class UserController {
             response.put("surname", user.getSurname());
             response.put("patronymic", user.getPatronymic());
             response.put("role", user.getIdRole().getNameRole());
-            
+
             return ResponseEntity.ok(response);
         } catch (Exception e) {
             return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
         }
     }
 
-    // Остальные методы остаются без изменений
+    // ================= ОСНОВНЫЕ CRUD МЕТОДЫ =================
+
     @GetMapping
     public ResponseEntity<List<User>> getAllUsers() {
         List<User> users = userService.findAll();
+        // Убираем пароли из ответа для безопасности
         users.forEach(user -> user.setPassword(null));
         return new ResponseEntity<>(users, HttpStatus.OK);
     }
@@ -63,11 +86,13 @@ public class UserController {
     public ResponseEntity<User> getUserById(@PathVariable Long id) {
         return userService.findById(id)
                 .map(user -> {
-                    user.setPassword(null);
+                    user.setPassword(null); // Не возвращаем пароль
                     return new ResponseEntity<>(user, HttpStatus.OK);
                 })
                 .orElse(new ResponseEntity<>(HttpStatus.NOT_FOUND));
     }
+
+    // ================= МЕТОДЫ СОЗДАНИЯ (объединенные) =================
 
     @PostMapping("/create-simple")
     public ResponseEntity<User> createUserSimple(
@@ -78,6 +103,7 @@ public class UserController {
             @RequestParam String password,
             @RequestParam Integer roleId) {
 
+        // Валидация обязательных полей
         if (surname == null || surname.trim().isEmpty() ||
                 name == null || name.trim().isEmpty() ||
                 login == null || login.trim().isEmpty() ||
@@ -91,8 +117,12 @@ public class UserController {
                 patronymic = "";
             }
 
+            // Получаем текущего пользователя (может быть null)
+            User currentUser = getCurrentUser();
+
+            // Передаем текущего пользователя в сервис
             User createdUser = userService.createUser(
-                    surname, name, patronymic, login, password, roleId
+                    surname, name, patronymic, login, password, roleId, currentUser
             );
 
             createdUser.setPassword(null);
@@ -105,18 +135,26 @@ public class UserController {
     @PostMapping
     public ResponseEntity<User> createUser(@RequestBody Map<String, Object> payload) {
         try {
+            // Извлекаем все поля из JSON
             String surname = (String) payload.get("surname");
             String name = (String) payload.get("name");
             String patronymic = (String) payload.get("patronymic");
             String login = (String) payload.get("login");
             String password = (String) payload.get("password");
 
+            // Извлекаем ID из вложенного объекта idRole (улучшенная обработка из второго файла)
             Map<String, Object> idRole = (Map<String, Object>) payload.get("idRole");
             Integer roleId = null;
             if (idRole != null) {
-                roleId = (Integer) idRole.get("id");
+                Object idObj = idRole.get("id");
+                if (idObj instanceof Integer) {
+                    roleId = (Integer) idObj;
+                } else if (idObj instanceof String) {
+                    roleId = Integer.parseInt((String) idObj);
+                }
             }
 
+            // Валидация
             if (surname == null || surname.trim().isEmpty() ||
                     name == null || name.trim().isEmpty() ||
                     login == null || login.trim().isEmpty() ||
@@ -129,8 +167,12 @@ public class UserController {
                 patronymic = "";
             }
 
+            // Получаем текущего пользователя для логирования
+            User currentUser = getCurrentUser();
+
+            // Создаем пользователя через сервис
             User createdUser = userService.createUser(
-                    surname, name, patronymic, login, password, roleId
+                    surname, name, patronymic, login, password, roleId, currentUser
             );
 
             createdUser.setPassword(null);
@@ -144,14 +186,64 @@ public class UserController {
         }
     }
 
+    // ================= МЕТОД РЕГИСТРАЦИИ (из второго файла) =================
+
+    @PostMapping("/register")
+    public ResponseEntity<User> registerUser(@RequestBody Map<String, Object> payload) {
+        try {
+            // Извлекаем все поля из JSON
+            String surname = (String) payload.get("surname");
+            String name = (String) payload.get("name");
+            String patronymic = (String) payload.get("patronymic");
+            String login = (String) payload.get("login");
+            String password = (String) payload.get("password");
+
+            // Для регистрации обычно роль "Абонент" (id = 2)
+            Integer roleId = 2;
+
+            // Валидация
+            if (surname == null || surname.trim().isEmpty() ||
+                    name == null || name.trim().isEmpty() ||
+                    login == null || login.trim().isEmpty() ||
+                    password == null || password.trim().isEmpty()) {
+                return new ResponseEntity<>(HttpStatus.BAD_REQUEST);
+            }
+
+            if (patronymic == null) {
+                patronymic = "";
+            }
+
+            // При регистрации нет текущего пользователя, поэтому передаем null
+            User createdUser = userService.createUser(
+                    surname, name, patronymic, login, password, roleId, null
+            );
+
+            createdUser.setPassword(null);
+            return new ResponseEntity<>(createdUser, HttpStatus.CREATED);
+
+        } catch (RuntimeException e) {
+            return new ResponseEntity(e.getMessage(), HttpStatus.BAD_REQUEST);
+        } catch (Exception e) {
+            e.printStackTrace();
+            return new ResponseEntity<>(HttpStatus.BAD_REQUEST);
+        }
+    }
+
+    // ================= МЕТОДЫ ОБНОВЛЕНИЯ И УДАЛЕНИЯ =================
+
     @PutMapping("/{id}")
     public ResponseEntity<User> updateUser(@PathVariable Long id, @RequestBody User user) {
-        if (!userService.findById(id).isPresent()) {
+        Optional<User> existingUser = userService.findById(id);
+        if (!existingUser.isPresent()) {
             return new ResponseEntity<>(HttpStatus.NOT_FOUND);
         }
+
         try {
-            User updatedUser = userService.update(id, user);
-            updatedUser.setPassword(null);
+            // Получаем текущего пользователя для логирования
+            User currentUser = getCurrentUser();
+
+            User updatedUser = userService.update(id, user, currentUser);
+            updatedUser.setPassword(null); // Не возвращаем пароль
             return new ResponseEntity<>(updatedUser, HttpStatus.OK);
         } catch (RuntimeException e) {
             return new ResponseEntity(e.getMessage(), HttpStatus.BAD_REQUEST);
@@ -160,12 +252,20 @@ public class UserController {
 
     @DeleteMapping("/{id}")
     public ResponseEntity<Void> deleteUser(@PathVariable Long id) {
-        if (!userService.findById(id).isPresent()) {
+        Optional<User> userOpt = userService.findById(id);
+        if (!userOpt.isPresent()) {
             return new ResponseEntity<>(HttpStatus.NOT_FOUND);
         }
-        userService.deleteById(id);
-        return new ResponseEntity<>(HttpStatus.NO_CONTENT);
+
+        try {
+            userService.deleteById(id);
+            return new ResponseEntity<>(HttpStatus.NO_CONTENT);
+        } catch (RuntimeException e) {
+            return new ResponseEntity(e.getMessage(), HttpStatus.BAD_REQUEST);
+        }
     }
+
+    // ================= ДОПОЛНИТЕЛЬНЫЕ МЕТОДЫ =================
 
     @GetMapping("/by-login/{login}")
     public ResponseEntity<User> getUserByLogin(@PathVariable String login) {

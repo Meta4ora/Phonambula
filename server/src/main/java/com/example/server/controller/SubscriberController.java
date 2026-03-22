@@ -1,8 +1,10 @@
 package com.example.server.controller;
 
+import com.example.server.dto.ContactDTO;
 import com.example.server.model.*;
 import com.example.server.service.*;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
@@ -26,17 +28,19 @@ public class SubscriberController {
     private final BuildingService buildingService;
 
     @Autowired
-    public SubscriberController(SubscriberService subscriberService, 
-                               UserService userService,
-                               PostService postService,
-                               DivisionService divisionService,
-                               BuildingService buildingService) {
+    public SubscriberController(SubscriberService subscriberService,
+                                UserService userService,
+                                PostService postService,
+                                DivisionService divisionService,
+                                BuildingService buildingService) {
         this.subscriberService = subscriberService;
         this.userService = userService;
         this.postService = postService;
         this.divisionService = divisionService;
         this.buildingService = buildingService;
     }
+
+    // ================= ОСНОВНЫЕ МЕТОДЫ (из первого файла) =================
 
     // Получение всех абонентов текущего пользователя
     @GetMapping("/my")
@@ -47,7 +51,6 @@ public class SubscriberController {
         User currentUser = userService.findByLogin(login)
                 .orElseThrow(() -> new RuntimeException("Пользователь не найден"));
 
-        // Используем findAll(), fetch с join можно настроить в сервисе при необходимости
         List<Subscriber> subscribers = subscriberService.findAll();
 
         List<Map<String, Object>> result = subscribers.stream()
@@ -87,7 +90,7 @@ public class SubscriberController {
         return map;
     }
 
-    // Обновление абонента
+    // Обновление абонента (из первого файла - через Map)
     @PutMapping("/{id}")
     public ResponseEntity<?> updateSubscriber(@PathVariable Long id, @RequestBody Map<String, Object> updatedFields) {
         try {
@@ -103,6 +106,7 @@ public class SubscriberController {
             boolean isAdmin = currentUser.getIdRole().getNameRole().equalsIgnoreCase("Администратор");
             boolean isSelf = existing.getIdUser().getId().equals(currentUser.getId());
 
+            // Проверка прав (закомментирована в первом файле, оставляем как есть)
             //if (!isAdmin && !isSelf) {
             //    return ResponseEntity.status(HttpStatus.FORBIDDEN)
             //            .body(Map.of("error", "Нет прав на редактирование"));
@@ -158,7 +162,7 @@ public class SubscriberController {
         }
     }
 
-    // Удаление абонента
+    // Удаление абонента (из первого файла)
     @DeleteMapping("/{id}")
     public ResponseEntity<?> deleteSubscriber(@PathVariable Long id) {
         try {
@@ -169,5 +173,171 @@ public class SubscriberController {
             return ResponseEntity.status(HttpStatus.BAD_REQUEST)
                     .body(Map.of("error", e.getMessage()));
         }
+    }
+
+    // ================= ДОПОЛНИТЕЛЬНЫЕ МЕТОДЫ (из второго файла) =================
+
+    @GetMapping
+    public ResponseEntity<List<Subscriber>> getAllSubscribers() {
+        List<Subscriber> subscribers = subscriberService.findAll();
+        return new ResponseEntity<>(subscribers, HttpStatus.OK);
+    }
+
+    @GetMapping("/{id}")
+    public ResponseEntity<Subscriber> getSubscriberById(@PathVariable Long id) {
+        return subscriberService.findById(id)
+                .map(subscriber -> new ResponseEntity<>(subscriber, HttpStatus.OK))
+                .orElse(new ResponseEntity<>(HttpStatus.NOT_FOUND));
+    }
+
+    @PostMapping("/create-simple")
+    public ResponseEntity<Subscriber> createSubscriberSimple(
+            @RequestParam Long userId,
+            @RequestParam Integer postId,
+            @RequestParam Integer divisionId,
+            @RequestParam Integer buildingId,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate dateBirth,
+            @RequestParam(required = false) String cabinetNumber,
+            @RequestParam(required = false) String internalPhoneNumber,
+            @RequestParam(required = false) String landlinePhoneNumber,
+            @RequestParam(required = false) String mobilePhoneNumber) {
+
+        // Валидация обязательных полей
+        if (userId == null || postId == null || divisionId == null || buildingId == null) {
+            return new ResponseEntity<>(HttpStatus.BAD_REQUEST);
+        }
+
+        try {
+            Subscriber createdSubscriber = subscriberService.createSubscriber(
+                    userId, postId, divisionId, buildingId,
+                    dateBirth, cabinetNumber, internalPhoneNumber,
+                    landlinePhoneNumber, mobilePhoneNumber
+            );
+            return new ResponseEntity<>(createdSubscriber, HttpStatus.CREATED);
+        } catch (RuntimeException e) {
+            return new ResponseEntity(e.getMessage(), HttpStatus.BAD_REQUEST);
+        }
+    }
+
+    @PostMapping
+    public ResponseEntity<Subscriber> createSubscriber(@RequestBody Subscriber subscriber) {
+        try {
+            Subscriber savedSubscriber = subscriberService.save(subscriber);
+            return new ResponseEntity<>(savedSubscriber, HttpStatus.CREATED);
+        } catch (Exception e) {
+            return new ResponseEntity<>(HttpStatus.BAD_REQUEST);
+        }
+    }
+
+    @PutMapping("/{id}/update")
+    public ResponseEntity<Subscriber> updateSubscriberSimple(@PathVariable Long id, @RequestBody Subscriber subscriber) {
+        if (!subscriberService.findById(id).isPresent()) {
+            return new ResponseEntity<>(HttpStatus.NOT_FOUND);
+        }
+        try {
+            Subscriber updatedSubscriber = subscriberService.update(id, subscriber);
+            return new ResponseEntity<>(updatedSubscriber, HttpStatus.OK);
+        } catch (RuntimeException e) {
+            return new ResponseEntity(e.getMessage(), HttpStatus.BAD_REQUEST);
+        }
+    }
+
+    @DeleteMapping("/{id}/delete")
+    public ResponseEntity<Void> deleteSubscriberSimple(@PathVariable Long id) {
+        if (!subscriberService.findById(id).isPresent()) {
+            return new ResponseEntity<>(HttpStatus.NOT_FOUND);
+        }
+        subscriberService.deleteById(id);
+        return new ResponseEntity<>(HttpStatus.NO_CONTENT);
+    }
+
+    @GetMapping("/user/{userId}")
+    public ResponseEntity<List<Subscriber>> getSubscribersByUser(@PathVariable Long userId) {
+        List<Subscriber> subscribers = subscriberService.findByUserId(userId);
+        return new ResponseEntity<>(subscribers, HttpStatus.OK);
+    }
+
+    @GetMapping("/contacts")
+    public ResponseEntity<List<ContactDTO>> getAllContacts() {
+        List<ContactDTO> contacts = subscriberService.findAllContacts();
+        return new ResponseEntity<>(contacts, HttpStatus.OK);
+    }
+
+    /**
+     * ПОЛНОТЕКСТОВЫЙ ПОИСК (возвращает полные данные)
+     */
+    @GetMapping("/search")
+    public ResponseEntity<List<Subscriber>> searchSubscribers(
+            @RequestParam String query) {
+        List<Subscriber> results = subscriberService.searchSubscribers(query);
+        return new ResponseEntity<>(results, HttpStatus.OK);
+    }
+
+    /**
+     * ПОИСК ПО ТЕЛЕФОНУ (возвращает полные данные)
+     */
+    @GetMapping("/search/phone")
+    public ResponseEntity<List<Subscriber>> searchByPhone(
+            @RequestParam String phone) {
+        List<Subscriber> results = subscriberService.searchByPhone(phone);
+        return new ResponseEntity<>(results, HttpStatus.OK);
+    }
+
+    /**
+     * БЫСТРЫЙ ПОИСК ПО ВСЕМ ПОЛЯМ (возвращает ContactDTO)
+     */
+    @GetMapping("/contacts/search")
+    public ResponseEntity<List<ContactDTO>> searchContacts(
+            @RequestParam(required = false) String query) {
+        if (query == null || query.trim().isEmpty()) {
+            return getAllContacts();
+        }
+        List<ContactDTO> contacts = subscriberService.searchAllContacts(query);
+        return new ResponseEntity<>(contacts, HttpStatus.OK);
+    }
+
+    /**
+     * БЫСТРЫЙ ПОИСК ПО ТЕЛЕФОНУ (возвращает ContactDTO)
+     */
+    @GetMapping("/contacts/search/phone")
+    public ResponseEntity<List<ContactDTO>> searchContactsByPhone(
+            @RequestParam String phone) {
+        List<ContactDTO> contacts = subscriberService.searchContactsByPhone(phone);
+        return new ResponseEntity<>(contacts, HttpStatus.OK);
+    }
+
+    /**
+     * автоопределение типа запроса (возвращает ContactDTO)
+     * Если в запросе есть цифры - ищет по телефону, иначе по текстовым полям
+     */
+    @GetMapping("/contacts/smart-search")
+    public ResponseEntity<List<ContactDTO>> smartSearch(
+            @RequestParam(required = false) String query) {
+        List<ContactDTO> contacts = subscriberService.smartSearch(query);
+        return new ResponseEntity<>(contacts, HttpStatus.OK);
+    }
+
+    /**
+     * ПОИСК ПО ДОЛЖНОСТИ (возвращает ContactDTO)
+     */
+    @GetMapping("/contacts/post/{postId}")
+    public ResponseEntity<List<ContactDTO>> getContactsByPost(
+            @PathVariable Integer postId) {
+        List<ContactDTO> contacts = subscriberService.findContactsByPostId(postId);
+        return new ResponseEntity<>(contacts, HttpStatus.OK);
+    }
+
+    @GetMapping("/contacts/division/{divisionId}")
+    public ResponseEntity<List<ContactDTO>> getContactsByDivision(
+            @PathVariable Integer divisionId) {
+        List<ContactDTO> contacts = subscriberService.findContactsByDivisionId(divisionId);
+        return new ResponseEntity<>(contacts, HttpStatus.OK);
+    }
+
+    @GetMapping("/contacts/building/{buildingId}")
+    public ResponseEntity<List<ContactDTO>> getContactsByBuilding(
+            @PathVariable Integer buildingId) {
+        List<ContactDTO> contacts = subscriberService.findContactsByBuildingId(buildingId);
+        return new ResponseEntity<>(contacts, HttpStatus.OK);
     }
 }

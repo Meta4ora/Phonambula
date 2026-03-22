@@ -50,9 +50,14 @@ public class SecurityConfig {
                         "/api/posts"
                 ).permitAll()
 
-                .requestMatchers("/api/subscribers/**").authenticated()
+                .requestMatchers("/user/").hasRole("USER")
 
-                .anyRequest().authenticated()
+                // временно доступ к аудиту открыт для всех
+                .requestMatchers("/api/audit/**").permitAll()
+
+                .requestMatchers("/admin/**").hasRole("ADMIN")
+
+                .anyRequest().permitAll()
             )
 
             .addFilterBefore(jwtFilter, UsernamePasswordAuthenticationFilter.class)
