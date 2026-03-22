@@ -446,12 +446,163 @@ async function deleteContact(event,id) {
     }
 }
 
-window.addEventListener('DOMContentLoaded', () => {
+async function openAddEmployeeModal() {
+    // Загружаем данные перед открытием
+    await loadReferenceDataForModal();
+    document.getElementById('addEmployeeModal').style.display = 'flex';
+}
 
-    if (!api?.token) {
+function closeAddEmployeeModal() {
+    document.getElementById('addEmployeeModal').style.display = 'none';
+}
+
+async function loadReferenceDataForModal() {
+    try {
+        // Загружаем должности
+        const positions = await api.get('/api/posts');
+        const positionSelect = document.getElementById('empPosition');
+        if (positionSelect) {
+            positionSelect.innerHTML = '<option value="">Не выбрано</option>';
+            positions.forEach(pos => {
+                const option = document.createElement('option');
+                option.value = pos.id;
+                option.textContent = pos.namePost;
+                positionSelect.appendChild(option);
+            });
+        }
+
+        // Загружаем отделы
+        const divisions = await api.get('/api/divisions');
+        const divisionSelect = document.getElementById('empDivision');
+        if (divisionSelect) {
+            divisionSelect.innerHTML = '<option value="">Не выбрано</option>';
+            divisions.forEach(div => {
+                const option = document.createElement('option');
+                option.value = div.id;
+                option.textContent = div.nameDivision;
+                divisionSelect.appendChild(option);
+            });
+        }
+
+        // Загружаем корпуса
+        const buildings = await api.get('/api/buildings');
+        const buildingSelect = document.getElementById('empBuilding');
+        if (buildingSelect) {
+            buildingSelect.innerHTML = '<option value="">Не выбрано</option>';
+            buildings.forEach(build => {
+                const option = document.createElement('option');
+                option.value = build.id;
+                option.textContent = build.nameBuilding || build.address || 'Без названия';
+                buildingSelect.appendChild(option);
+            });
+        }
+
+        // Загружаем роли
+        const roles = await api.get('/api/roles');
+        const roleSelect = document.getElementById('empRole');
+        if (roleSelect) {
+            roleSelect.innerHTML = '<option value="">Не выбрано</option>';
+            roles.forEach(role => {
+                const option = document.createElement('option');
+                option.value = role.id;
+                // Используем правильное поле из модели Role
+                option.textContent = role.nameRole || role.name;
+                roleSelect.appendChild(option);
+            });
+        }
+
+    } catch (err) {
+        console.error('Ошибка загрузки справочников:', err);
+        alert('Ошибка загрузки данных: ' + err.message);
+    }
+}
+
+
+async function saveNewEmployee() {
+    // Проверка паролей
+    const password = document.getElementById('empPassword').value;
+    const confirmPassword = document.getElementById('empConfirmPassword').value;
+    
+    if (password !== confirmPassword) {
+        alert('Пароли не совпадают');
+        return;
+    }
+    
+    if (!password || password.length < 4) {
+        alert('Пароль должен содержать минимум 4 символа');
+        return;
+    }
+    
+    const surname = document.getElementById('empSurname').value.trim();
+    const name = document.getElementById('empName').value.trim();
+    const patronymic = document.getElementById('empPatronymic').value.trim();
+    const login = document.getElementById('empLogin').value.trim();
+    
+    if (!surname || !name || !login) {
+        alert('Пожалуйста, заполните все обязательные поля (Фамилия, Имя, Логин)');
+        return;
+    }
+    
+    // Получаем значения из select
+    const roleId = document.getElementById('empRole').value;
+    const postId = document.getElementById('empPosition').value;
+    const divisionId = document.getElementById('empDivision').value;
+    const buildingId = document.getElementById('empBuilding').value;
+    
+    // Собираем данные для отправки
+    const data = {
+        // Поля для создания пользователя
+        surname: surname,
+        name: name,
+        patronymic: patronymic || "",
+        login: login,
+        password: password,
+        roleId: roleId ? Number(roleId) : null,
+        
+        // Поля для создания абонента
+        postId: postId ? Number(postId) : null,
+        divisionId: divisionId ? Number(divisionId) : null,
+        buildingId: buildingId ? Number(buildingId) : null,
+        
+        // Телефоны и кабинет
+        mobilePhoneNumber: document.getElementById('empMobilePhone').value.trim() || "",
+        landlinePhoneNumber: document.getElementById('empLandlinePhone').value.trim() || "",
+        internalPhoneNumber: document.getElementById('empInternalPhone').value.trim() || "",
+        cabinetNumber: document.getElementById('empCabinet').value.trim() || ""
+    };
+    
+    try {
+        console.log('Отправка данных:', data);
+        
+        // Отправляем запрос на регистрацию
+        const response = await api.post('/auth/register', data);
+        
+        console.log('Ответ сервера:', response);
+        alert('Сотрудник успешно добавлен');
+        closeAddEmployeeModal();
+        
+        // Очистка формы
+        document.querySelectorAll('#addEmployeeModal input').forEach(i => i.value = '');
+        document.querySelectorAll('#addEmployeeModal select').forEach(s => s.value = '');
+        
+        // Сохраняем токен, если он вернулся
+        if (response.token) {
+            api.setToken(response.token);
+        }
+        
+        // Перезагружаем список контактов
+        await loadMyContacts();
+        
+    } catch (err) {
+        console.error('Ошибка при добавлении:', err);
+        alert('Ошибка добавления: ' + (err.message || 'Сервер не ответил'));
+    }
+}
+
+window.addEventListener('DOMContentLoaded', () => {
+    if (!api.isAuthenticated()) {
         window.location.href = '/login.html';
     } else {
         loadMyContacts();
     }
-
 });

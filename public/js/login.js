@@ -56,26 +56,54 @@ async function handleRegister() {
     const password = document.getElementById('password-reg').value;
     const confirmPassword = document.getElementById('confirm-password').value;
 
+    if (!name || !login || !password) {
+        alert('Заполните все поля');
+        return;
+    }
+
     if (password !== confirmPassword) {
         alert('Пароли не совпадают');
         return;
     }
 
     try {
+        // Разделяем имя на части
+        const nameParts = name.trim().split(' ');
+        let surname = '';
+        let firstName = '';
+        let patronymic = '';
+        
+        if (nameParts.length === 1) {
+            firstName = nameParts[0];
+        } else if (nameParts.length === 2) {
+            surname = nameParts[0];
+            firstName = nameParts[1];
+        } else if (nameParts.length >= 3) {
+            surname = nameParts[0];
+            firstName = nameParts[1];
+            patronymic = nameParts.slice(2).join(' ');
+        }
+        
         const data = await api.post('/auth/register', {
-            name,
-            login,
-            password
+            surname: surname,
+            name: firstName,
+            patronymic: patronymic,
+            login: login,
+            password: password,
+            roleId: null,  // По умолчанию без роли
+            buildingId: null,
+            divisionId: null,
+            postId: null
         });
 
         api.setToken(data.token);
-
-        localStorage.setItem('userName', data.name);
-        localStorage.setItem('userLogin', data.login);
+        localStorage.setItem('userName', data.login || login);
+        localStorage.setItem('userLogin', data.login || login);
 
         window.location.href = '/home.html';
 
     } catch (error) {
+        console.error('Registration error:', error);
         alert(error.message || 'Ошибка регистрации');
     }
 }
@@ -227,32 +255,89 @@ function fillSelect(id, data, valueField, textField) {
 }
 
 async function finishRegistration() {
-
-    const response = await api.post("/auth/register", {
-        surname: "",
-        name: tempRegisterData.name,
-        patronymic: "",
-        login: tempRegisterData.login,
-        password: tempRegisterData.password,
-        roleId: Number(roleSelect.value),
-        buildingId: Number(buildingSelect.value),
-        divisionId: Number(divisionSelect.value),
-        postId: Number(postSelect.value)
-    });
-
-    localStorage.setItem("token", response.token);
-    window.location.href = "/home.html";
+    try {
+        // Получаем значения из select
+        const roleSelect = document.getElementById("roleSelect");
+        const buildingSelect = document.getElementById("buildingSelect");
+        const divisionSelect = document.getElementById("divisionSelect");
+        const postSelect = document.getElementById("postSelect");
+        
+        // Разделяем ФИО на части
+        const fullName = tempRegisterData.name.trim();
+        const nameParts = fullName.split(' ');
+        
+        let surname = '';
+        let name = '';
+        let patronymic = '';
+        
+        if (nameParts.length === 1) {
+            name = nameParts[0];
+        } else if (nameParts.length === 2) {
+            surname = nameParts[0];
+            name = nameParts[1];
+        } else if (nameParts.length >= 3) {
+            surname = nameParts[0];
+            name = nameParts[1];
+            patronymic = nameParts.slice(2).join(' ');
+        }
+        
+        const requestData = {
+            surname: surname,
+            name: name,
+            patronymic: patronymic,
+            login: tempRegisterData.login,
+            password: tempRegisterData.password,
+            roleId: roleSelect ? Number(roleSelect.value) : null,
+            buildingId: buildingSelect ? Number(buildingSelect.value) : null,
+            divisionId: divisionSelect ? Number(divisionSelect.value) : null,
+            postId: postSelect ? Number(postSelect.value) : null
+        };
+        
+        console.log('Sending registration data:', requestData);
+        
+        const response = await api.post("/auth/register", requestData);
+        
+        if (response && response.token) {
+            api.setToken(response.token);
+            localStorage.setItem('userName', response.login || tempRegisterData.name);
+            localStorage.setItem('userLogin', response.login || tempRegisterData.login);
+            window.location.href = "/home.html";
+        } else {
+            throw new Error('Не получен токен авторизации');
+        }
+        
+    } catch (error) {
+        console.error('Registration error:', error);
+        alert('Ошибка регистрации: ' + (error.message || 'Попробуйте позже'));
+    }
 }
 
 async function login() {
-    const loginValue = document.getElementById("loginAuth").value;
-    const passwordValue = document.getElementById("passwordAuth").value;
-
-    const response = await api.post("/auth/login", {
-        login: loginValue,
-        password: passwordValue
-    });
-
-    localStorage.setItem("token", response.token);
-    window.location.href = "/home.html";
+    try {
+        const loginValue = document.getElementById("loginAuth").value;
+        const passwordValue = document.getElementById("passwordAuth").value;
+        
+        if (!loginValue || !passwordValue) {
+            alert('Заполните все поля');
+            return;
+        }
+        
+        const response = await api.post("/auth/login", {
+            login: loginValue,
+            password: passwordValue
+        });
+        
+        if (response && response.token) {
+            api.setToken(response.token);
+            localStorage.setItem('userName', response.login || loginValue);
+            localStorage.setItem('userLogin', response.login || loginValue);
+            window.location.href = "/home.html";
+        } else {
+            throw new Error('Не получен токен авторизации');
+        }
+        
+    } catch (error) {
+        console.error('Login error:', error);
+        alert('Ошибка входа: ' + (error.message || 'Неверный логин или пароль'));
+    }
 }

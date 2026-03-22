@@ -7,12 +7,20 @@ class ApiClient {
 
     setToken(token) {
         this.token = token;
-        localStorage.setItem('token', token);
+        if (token) {
+            localStorage.setItem('token', token);
+        } else {
+            localStorage.removeItem('token');
+        }
     }
 
     clearToken() {
         this.token = null;
         localStorage.removeItem('token');
+    }
+
+    isAuthenticated() {
+        return !!this.token;
     }
 
     async request(endpoint, options = {}) {
@@ -22,34 +30,58 @@ class ApiClient {
             ...options.headers
         };
 
+        if (this.token) {
+            headers['Authorization'] = `Bearer ${this.token}`;
+        }
+
         const config = {
             ...options,
             headers,
             credentials: 'include'
         };
 
-        if (this.token) {
-            headers['Authorization'] = `Bearer ${this.token}`;
+        try {
+            const response = await fetch(url, config);
+            
+            // Обработка 401 Unauthorized
+            if (response.status === 401) {
+                this.clearToken();
+                // Не перенаправляем на логин, если это не запрос на авторизацию
+                if (!endpoint.includes('/auth/')) {
+                    window.location.href = '/login.html';
+                }
+                throw new Error('Не авторизован');
+            }
+            
+            // Проверяем, есть ли тело ответа
+            const contentType = response.headers.get('content-type');
+            if (contentType && contentType.includes('application/json')) {
+                const data = await response.json();
+                
+                if (!response.ok) {
+                    throw new Error(data.message || data.error || `HTTP ${response.status}`);
+                }
+                
+                return data;
+            }
+            
+            // Для ответов без тела
+            if (response.status === 204) {
+                return null;
+            }
+            
+            // Для текстовых ответов
+            const text = await response.text();
+            if (!response.ok) {
+                throw new Error(text || `HTTP ${response.status}`);
+            }
+            
+            return text;
+            
+        } catch (error) {
+            console.error(`API request failed (${endpoint}):`, error);
+            throw error;
         }
-
-        const response = await fetch(url, config);
-
-        if (response.status === 401) {
-            this.clearToken();
-            window.location.href = '/login.html';
-            throw new Error('Unauthorized');
-        }
-
-        // Если тело пустое, не пытаться делать JSON
-        if (response.status === 204) return null;
-
-        const data = await response.json();
-
-        if (!response.ok) {
-            throw new Error(data.message || 'Request failed');
-        }
-
-        return data;
     }
 
     async get(endpoint) {

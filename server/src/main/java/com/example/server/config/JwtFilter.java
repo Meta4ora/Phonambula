@@ -28,6 +28,13 @@ public class JwtFilter extends OncePerRequestFilter {
     @Override
     protected boolean shouldNotFilter(HttpServletRequest request) {
         String path = request.getServletPath();
+        String method = request.getMethod();
+        
+        // Пропускаем OPTIONS запросы
+        if ("OPTIONS".equalsIgnoreCase(method)) {
+            return true;
+        }
+        
         return path.startsWith("/auth/")
                 || path.startsWith("/swagger-ui/")
                 || path.startsWith("/v3/api-docs/")
@@ -41,31 +48,31 @@ public class JwtFilter extends OncePerRequestFilter {
                                     FilterChain filterChain)
             throws ServletException, IOException {
 
-        final String header = request.getHeader("Authorization");
+        final String authHeader = request.getHeader("Authorization");
 
-        if (header != null && header.startsWith("Bearer ")) {
-            final String token = header.substring(7);
+        if (authHeader != null && authHeader.startsWith("Bearer ")) {
+            final String token = authHeader.substring(7);
+            
+            try {
+                if (jwtService.validateToken(token)) {
+                    String login = jwtService.extractLogin(token);
 
-            // Проверяем валидность токена
-            if (jwtService.validateToken(token)) {
-                String login = jwtService.extractLogin(token);
+                    if (login != null && SecurityContextHolder.getContext().getAuthentication() == null) {
+                        UserDetails userDetails = userDetailsService.loadUserByUsername(login);
 
-                if (login != null && SecurityContextHolder.getContext().getAuthentication() == null) {
-                    UserDetails userDetails = userDetailsService.loadUserByUsername(login);
-
-                    // Создаём объект аутентификации
-                    UsernamePasswordAuthenticationToken authToken =
-                            new UsernamePasswordAuthenticationToken(
+                        UsernamePasswordAuthenticationToken authToken = 
+                                new UsernamePasswordAuthenticationToken(
                                     userDetails,
                                     null,
                                     userDetails.getAuthorities()
-                            );
-                    authToken.setDetails(
-                            new WebAuthenticationDetailsSource().buildDetails(request)
-                    );
-
-                    SecurityContextHolder.getContext().setAuthentication(authToken);
+                                );
+                        
+                        authToken.setDetails(new WebAuthenticationDetailsSource().buildDetails(request));
+                        SecurityContextHolder.getContext().setAuthentication(authToken);
+                    }
                 }
+            } catch (Exception e) {
+                logger.error("Cannot set user authentication: " + e.getMessage());
             }
         }
 
