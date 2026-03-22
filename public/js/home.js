@@ -1,96 +1,206 @@
 let contactsData = {};
 let editedContactId = null;
-let currentUserRole = null; // Добавляем переменную для роли
+let currentUserRole = null;
+let searchTerm = '';
+
+// Функция для экранирования HTML
+function escapeHtml(text) {
+    if (!text) return '';
+    const div = document.createElement('div');
+    div.textContent = text;
+    return div.innerHTML;
+}
 
 // Функция для проверки, является ли пользователь администратором
 function isAdmin() {
-    console.log('Current user role:', currentUserRole); // Для отладки
-    
-    // Проверяем различные варианты названия роли
-    return currentUserRole === 'Администратор' || 
-           currentUserRole === 'ROLE_Администратор';
+    if (!currentUserRole) return false;
+    const roleLower = currentUserRole.toLowerCase();
+    return roleLower === 'администратор' || 
+           roleLower === 'administrator' || 
+           roleLower === 'admin';
 }
 
-async function loadMyContacts() {
-    try {
-        const data = await api.get('/api/subscribers/my');
-        contactsData = {};
-        data.forEach(contact => {
-            contactsData[contact.id] = contact;
-        });
-        
-        // Загружаем роль текущего пользователя, если еще не загружена
-        if (!currentUserRole) {
-            // Получаем роль из localStorage
-            currentUserRole = localStorage.getItem('userRole');
-            
-            // Если роль не сохранена, можно получить из API
-            if (!currentUserRole) {
-                try {
-                    const userInfo = await api.get('/api/users/me');
-                    currentUserRole = userInfo.role;
-                    localStorage.setItem('userRole', currentUserRole);
-                } catch (err) {
-                    console.error('Не удалось получить роль пользователя', err);
-                }
+// Функция для показа уведомлений
+function showNotification(message, type = 'success') {
+    const existingNotification = document.querySelector('.notification');
+    if (existingNotification) {
+        existingNotification.remove();
+    }
+    
+    const notification = document.createElement('div');
+    notification.className = `notification notification-${type}`;
+    notification.textContent = message;
+    notification.style.cssText = `
+        position: fixed;
+        top: 20px;
+        right: 20px;
+        padding: 12px 24px;
+        border-radius: 8px;
+        font-size: 14px;
+        font-weight: 500;
+        z-index: 10000;
+        animation: slideIn 0.3s ease;
+        background: ${type === 'success' ? '#4CAF50' : type === 'error' ? '#f44336' : '#ff9800'};
+        color: white;
+        box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+    `;
+    
+    document.body.appendChild(notification);
+    
+    setTimeout(() => {
+        notification.style.animation = 'slideOut 0.3s ease';
+        setTimeout(() => notification.remove(), 300);
+    }, 3000);
+}
+
+// Добавляем стили для анимации
+if (!document.querySelector('#animation-styles')) {
+    const style = document.createElement('style');
+    style.id = 'animation-styles';
+    style.textContent = `
+        @keyframes slideIn {
+            from {
+                transform: translateX(100%);
+                opacity: 0;
+            }
+            to {
+                transform: translateX(0);
+                opacity: 1;
             }
         }
-        
-        rebuildContactTree();
-        const firstKey = Object.keys(contactsData)[0];
-        if (firstKey) {
-            showContactDetails(firstKey);
+        @keyframes slideOut {
+            from {
+                transform: translateX(0);
+                opacity: 1;
+            }
+            to {
+                transform: translateX(100%);
+                opacity: 0;
+            }
         }
-        
-        // Показываем или скрываем кнопку добавления сотрудника
-        const addEmployeeBtn = document.getElementById('addEmployeeBtn');
-        if (addEmployeeBtn) {
-            addEmployeeBtn.style.display = isAdmin() ? 'block' : 'none';
+        .highlight {
+            background-color: rgba(77, 63, 141, 0.2);
+            border-radius: 3px;
+            padding: 0 2px;
         }
-        
+    `;
+    document.head.appendChild(style);
+}
+
+// Функция для обработки ошибок API
+async function safeApiCall(apiCall, errorMessage = 'Произошла ошибка') {
+    try {
+        return await apiCall();
     } catch (err) {
-        console.error("Ошибка загрузки контактов:", err);
-        alert('Не удалось загрузить контакты');
+        console.error('API Error:', err);
+        
+        if (err.message === 'HTTP 401' || err.message === 'HTTP 403') {
+            showNotification('Сессия истекла. Перенаправление на страницу входа...', 'error');
+            setTimeout(() => {
+                api.clearToken();
+                localStorage.clear();
+                window.location.href = '/login.html';
+            }, 1500);
+            throw err;
+        }
+        
+        showNotification(errorMessage + ': ' + (err.message || 'Неизвестная ошибка'), 'error');
+        throw err;
     }
 }
 
+// Функция поиска контактов (возвращает ID контактов, подходящих под поиск)
+function getFilteredContactIds(term) {
+    if (!term || term.trim() === '') {
+        return Object.keys(contactsData);
+    }
+    
+    const searchLower = term.toLowerCase().trim();
+    
+    return Object.keys(contactsData).filter(id => {
+        const contact = contactsData[id];
+        return (
+            (contact.name && contact.name.toLowerCase().includes(searchLower)) ||
+            (contact.mobilePhone && contact.mobilePhone.toLowerCase().includes(searchLower)) ||
+            (contact.landlinePhone && contact.landlinePhone.toLowerCase().includes(searchLower)) ||
+            (contact.internalPhone && contact.internalPhone.toLowerCase().includes(searchLower)) ||
+            (contact.position && contact.position.toLowerCase().includes(searchLower)) ||
+            (contact.department && contact.department.toLowerCase().includes(searchLower)) ||
+            (contact.building && contact.building.toLowerCase().includes(searchLower)) ||
+            (contact.cabinet && contact.cabinet.toLowerCase().includes(searchLower)) ||
+            (contact.id && contact.id.toString().includes(searchLower))
+        );
+    });
+}
+
+// Функция для подсветки найденного текста
+function highlightText(text, searchTerm) {
+    if (!searchTerm || !text || searchTerm.trim() === '') return escapeHtml(text);
+    
+    const searchLower = searchTerm.toLowerCase();
+    const textLower = text.toLowerCase();
+    const index = textLower.indexOf(searchLower);
+    
+    if (index === -1) return escapeHtml(text);
+    
+    const start = text.substring(0, index);
+    const match = text.substring(index, index + searchTerm.length);
+    const end = text.substring(index + searchTerm.length);
+    
+    return `${escapeHtml(start)}<span class="highlight">${escapeHtml(match)}</span>${escapeHtml(end)}`;
+}
+
+// Функция построения дерева контактов
 function rebuildContactTree() {
     const treeContainer = document.querySelector('.contact-tree');
     if (!treeContainer) return;
 
+    const filteredIds = getFilteredContactIds(searchTerm);
+    const filteredContacts = filteredIds.map(id => contactsData[id]);
+    
     treeContainer.innerHTML = '';
 
-    if (Object.keys(contactsData).length === 0) {
+    if (filteredContacts.length === 0) {
         treeContainer.innerHTML = '<li><p>Нет контактов</p></li>';
+        const searchContainer = document.querySelector('.search-container');
+        const existingCount = document.querySelector('.search-result-count');
+        if (existingCount) existingCount.remove();
+        
+        const countDiv = document.createElement('div');
+        countDiv.className = 'search-result-count';
+        countDiv.textContent = searchTerm ? 'Ничего не найдено' : 'Нет контактов';
+        if (searchContainer) {
+            searchContainer.insertAdjacentElement('afterend', countDiv);
+        }
         return;
     }
 
-    let html = '';
-    const contacts = Object.values(contactsData);
+    // Группировка
     const grouped = {};
-
-    contacts.forEach(contact => {
+    filteredContacts.forEach(contact => {
         const firstLetter = (contact.name || '?')[0].toUpperCase();
         if (!grouped[firstLetter]) grouped[firstLetter] = [];
         grouped[firstLetter].push(contact);
     });
 
+    let html = '';
     Object.keys(grouped).sort().forEach(letter => {
         html += `
             <li>
-                <div class="category expanded" onclick="toggleCategory(this)">${letter}</div>
+                <div class="category expanded" onclick="toggleCategory(this)">${escapeHtml(letter)}</div>
                 <ul class="sub-list">
         `;
 
         grouped[letter].forEach(contact => {
-            // Кнопка удаления только для администраторов
             const deleteButton = isAdmin() 
                 ? `<button class="delete-btn" onclick="deleteContact(event,'${contact.id}')">Удалить</button>`
                 : '';
                 
+            const displayName = searchTerm ? highlightText(contact.name || '—', searchTerm) : escapeHtml(contact.name || '—');
+                
             html += `
-                <li class="contact-item" onclick="selectContact(this,'${contact.id}')">
-                    ${contact.name || '—'}
+                <li class="contact-item" data-contact-id="${contact.id}" onclick="selectContact(this,'${contact.id}')">
+                    ${displayName}
                     ${deleteButton}
                 </li>
             `;
@@ -103,40 +213,187 @@ function rebuildContactTree() {
     });
 
     treeContainer.innerHTML = html;
-}
-
-function toggleCategory(element) {
-    element.classList.toggle('expanded');
-    const subList = element.nextElementSibling;
-    if (subList) {
-        subList.style.display = element.classList.contains('expanded') ? 'block' : 'none';
+    
+    // Добавляем счетчик
+    const searchContainer = document.querySelector('.search-container');
+    const existingCount = document.querySelector('.search-result-count');
+    if (existingCount) existingCount.remove();
+    
+    const countDiv = document.createElement('div');
+    countDiv.className = 'search-result-count';
+    if (searchTerm) {
+        countDiv.textContent = `Найдено: ${filteredContacts.length} из ${Object.keys(contactsData).length}`;
+    } else {
+        countDiv.textContent = `Всего контактов: ${Object.keys(contactsData).length}`;
+    }
+    if (searchContainer) {
+        searchContainer.insertAdjacentElement('afterend', countDiv);
+    }
+    
+    // Восстанавливаем активный класс для выбранного контакта
+    if (editedContactId && filteredIds.includes(editedContactId.toString())) {
+        const activeItem = document.querySelector(`.contact-item[data-contact-id="${editedContactId}"]`);
+        if (activeItem) {
+            activeItem.classList.add('active');
+        }
     }
 }
 
+// Функция обработки поиска
+function handleSearch() {
+    const searchInput = document.getElementById('searchInput');
+    const clearBtn = document.getElementById('clearSearchBtn');
+    
+    if (searchInput) {
+        searchTerm = searchInput.value;
+        
+        if (clearBtn) {
+            clearBtn.style.display = searchTerm ? 'flex' : 'none';
+        }
+        
+        rebuildContactTree();
+        
+        // Проверяем, виден ли текущий выбранный контакт
+        const filteredIds = getFilteredContactIds(searchTerm);
+        if (editedContactId && filteredIds.includes(editedContactId.toString())) {
+            // Если выбранный контакт виден, обновляем его детали (для подсветки)
+            showContactDetails(editedContactId);
+        } else if (filteredIds.length > 0) {
+            // Если выбранный контакт не виден, выбираем первый из результатов
+            const firstVisibleId = filteredIds[0];
+            const firstVisibleElement = document.querySelector(`.contact-item[data-contact-id="${firstVisibleId}"]`);
+            if (firstVisibleElement) {
+                selectContact(firstVisibleElement, firstVisibleId);
+            }
+        } else {
+            // Если нет результатов, очищаем детали
+            const detailsDiv = document.getElementById('contactDetails');
+            if (detailsDiv) {
+                detailsDiv.innerHTML = '<div class="no-contact-selected"><p>Нет контактов для отображения</p></div>';
+            }
+        }
+    }
+}
+
+// Функция очистки поиска
+function clearSearch() {
+    const searchInput = document.getElementById('searchInput');
+    if (searchInput) {
+        searchInput.value = '';
+        handleSearch();
+        searchInput.focus();
+    }
+}
+
+// Загрузка контактов
+async function loadMyContacts() {
+    try {
+        const data = await safeApiCall(
+            () => api.get('/api/subscribers/my'),
+            'Не удалось загрузить контакты'
+        );
+        
+        contactsData = {};
+        data.forEach(contact => {
+            contactsData[contact.id] = contact;
+        });
+        
+        rebuildContactTree();
+        
+        const filteredIds = getFilteredContactIds(searchTerm);
+        if (filteredIds.length > 0) {
+            // Если есть выбранный контакт и он виден, показываем его
+            if (editedContactId && filteredIds.includes(editedContactId.toString())) {
+                showContactDetails(editedContactId);
+                // Восстанавливаем активный класс
+                const activeItem = document.querySelector(`.contact-item[data-contact-id="${editedContactId}"]`);
+                if (activeItem) {
+                    document.querySelectorAll('.contact-item').forEach(i => i.classList.remove('active'));
+                    activeItem.classList.add('active');
+                }
+            } else {
+                // Иначе показываем первый контакт
+                const firstId = filteredIds[0];
+                const firstElement = document.querySelector(`.contact-item[data-contact-id="${firstId}"]`);
+                if (firstElement) {
+                    selectContact(firstElement, firstId);
+                } else {
+                    showContactDetails(firstId);
+                }
+            }
+        } else {
+            const detailsDiv = document.getElementById('contactDetails');
+            if (detailsDiv) {
+                detailsDiv.innerHTML = '<div class="no-contact-selected"><p>Нет контактов для отображения</p></div>';
+            }
+        }
+        
+        const addEmployeeBtn = document.getElementById('addEmployeeBtn');
+        if (addEmployeeBtn) {
+            addEmployeeBtn.style.display = isAdmin() ? 'block' : 'none';
+        }
+        
+    } catch (err) {
+        console.error("Ошибка загрузки контактов:", err);
+    }
+}
+
+// Выбор контакта
 function selectContact(element, contactId) {
+    // Проверяем, существует ли контакт
+    if (!contactsData[contactId]) {
+        showNotification('Контакт не найден', 'error');
+        return;
+    }
+    
+    // Если есть активный поиск, проверяем, виден ли контакт
+    if (searchTerm && searchTerm.trim() !== '') {
+        const filteredIds = getFilteredContactIds(searchTerm);
+        if (!filteredIds.includes(contactId.toString())) {
+            showNotification('Этот контакт не отображается в результатах поиска', 'warning');
+            return;
+        }
+    }
+    
+    // Обновляем активный класс
     document.querySelectorAll('.contact-item').forEach(i => i.classList.remove('active'));
     element.classList.add('active');
+    
+    // Показываем детали
     showContactDetails(contactId);
 }
 
+// Показ деталей контакта
 function showContactDetails(contactId) {
-    editedContactId = contactId;
+    if (!contactsData[contactId]) {
+        const detailsDiv = document.getElementById('contactDetails');
+        if (detailsDiv) {
+            detailsDiv.innerHTML = '<div class="no-contact-selected"><p>Контакт не найден</p></div>';
+        }
+        return;
+    }
+    
     const c = contactsData[contactId];
-    if (!c) return;
-
+    editedContactId = contactId;
+    
     const detailsDiv = document.getElementById('contactDetails');
     if (!detailsDiv) return;
 
-    // Определяем, видимы ли кнопки редактирования
     const showEditButtons = isAdmin();
-    
-    // Формируем кнопки изменения для справочников
     const editButtonHtml = (field, id, name) => showEditButtons 
-        ? `<button class="edit-btn" onclick="editReference('${field}', ${id || 'null'}, '${(name || '').replace(/'/g,"\\'")}')">Изменить</button>`
+        ? `<button class="edit-btn" onclick="editReference('${field}', ${id || 'null'}, '${escapeHtml(name || '').replace(/'/g,"\\'")}')">Изменить</button>`
         : '';
 
+    const highlightField = (value) => {
+        if (!searchTerm || !value) return escapeHtml(value || '—');
+        if (value.toLowerCase().includes(searchTerm.toLowerCase())) {
+            return highlightText(value, searchTerm);
+        }
+        return escapeHtml(value || '—');
+    };
+
     detailsDiv.innerHTML = `
-    <h2>${c.name || '—'}</h2>
+    <h2>${highlightField(c.name)}</h2>
 
     <div class="detail-section">
         <h4>Контактные данные</h4>
@@ -145,9 +402,9 @@ function showContactDetails(contactId) {
             <div class="detail-label">Мобильный</div>
             <div class="detail-value ${showEditButtons ? 'clickable' : ''}"
                  data-field="mobilePhone"
-                 data-original="${c.mobilePhone || ''}"
+                 data-original="${escapeHtml(c.mobilePhone || '')}"
                  ${showEditButtons ? `onclick="makeEditable(this, 'mobilePhone')"` : ''}>
-                ${c.mobilePhone || '—'}
+                ${highlightField(c.mobilePhone)}
             </div>
         </div>
 
@@ -155,9 +412,9 @@ function showContactDetails(contactId) {
             <div class="detail-label">Городской</div>
             <div class="detail-value ${showEditButtons ? 'clickable' : ''}"
                  data-field="landlinePhone"
-                 data-original="${c.landlinePhone || ''}"
+                 data-original="${escapeHtml(c.landlinePhone || '')}"
                  ${showEditButtons ? `onclick="makeEditable(this, 'landlinePhone')"` : ''}>
-                ${c.landlinePhone || '—'}
+                ${highlightField(c.landlinePhone)}
             </div>
         </div>
 
@@ -165,9 +422,9 @@ function showContactDetails(contactId) {
             <div class="detail-label">Внутренний</div>
             <div class="detail-value ${showEditButtons ? 'clickable' : ''}"
                  data-field="internalPhone"
-                 data-original="${c.internalPhone || ''}"
+                 data-original="${escapeHtml(c.internalPhone || '')}"
                  ${showEditButtons ? `onclick="makeEditable(this, 'internalPhone')"` : ''}>
-                ${c.internalPhone || '—'}
+                ${highlightField(c.internalPhone)}
             </div>
         </div>
     </div>
@@ -181,7 +438,7 @@ function showContactDetails(contactId) {
                 <div class="detail-value"
                      data-field="position"
                      data-id="${c.positionId || ''}">
-                    ${c.position || '—'}
+                    ${highlightField(c.position)}
                 </div>
                 ${editButtonHtml('position', c.positionId, c.position)}
             </div>
@@ -193,7 +450,7 @@ function showContactDetails(contactId) {
                 <div class="detail-value"
                      data-field="department"
                      data-id="${c.departmentId || ''}">
-                    ${c.department || '—'}
+                    ${highlightField(c.department)}
                 </div>
                 ${editButtonHtml('department', c.departmentId, c.department)}
             </div>
@@ -205,7 +462,7 @@ function showContactDetails(contactId) {
                 <div class="detail-value"
                      data-field="building"
                      data-id="${c.buildingId || ''}">
-                    ${c.building || '—'}
+                    ${highlightField(c.building)}
                 </div>
                 ${editButtonHtml('building', c.buildingId, c.building)}
             </div>
@@ -215,21 +472,327 @@ function showContactDetails(contactId) {
             <div class="detail-label">Кабинет</div>
             <div class="detail-value ${showEditButtons ? 'clickable' : ''}"
                  data-field="cabinet"
-                 data-original="${c.cabinet || ''}"
+                 data-original="${escapeHtml(c.cabinet || '')}"
                  ${showEditButtons ? `onclick="makeEditable(this, 'cabinet')"` : ''}>
-                ${c.cabinet || '—'}
+                ${highlightField(c.cabinet)}
             </div>
         </div>
     </div>
 
-    <!-- кнопка сохранения только для администраторов -->
     <div class="save-button-container">
         <button id="saveBtn" style="display:none;" onclick="saveContact()">Сохранить изменения</button>
     </div>
 `;
 }
 
+// Функция удаления контакта
+async function deleteContact(event, id) {
+    event.stopPropagation();
+    
+    if (!isAdmin()) {
+        showNotification('У вас нет прав для удаления контактов', 'error');
+        return;
+    }
+
+    const contact = contactsData[id];
+    if (!confirm(`Удалить контакт "${contact?.name || '?'}"?`)) return;
+
+    try {
+        await safeApiCall(
+            () => api.delete(`/api/subscribers/${id}`),
+            'Не удалось удалить контакт'
+        );
+        
+        showNotification('Контакт успешно удалён', 'success');
+
+        if (String(id) === String(editedContactId)) {
+            editedContactId = null;
+        }
+
+        await loadMyContacts();
+    } catch (err) {
+        console.error(err);
+    }
+}
+
+// Функция открытия модального окна добавления сотрудника
+async function openAddEmployeeModal() {
+    if (!isAdmin()) {
+        showNotification('У вас нет прав для добавления сотрудников', 'error');
+        return;
+    }
+    await loadReferenceDataForModal();
+    const modal = document.getElementById('addEmployeeModal');
+    if (modal) {
+        modal.style.display = 'flex';
+    }
+}
+
+// Функция закрытия модального окна
+function closeAddEmployeeModal() {
+    const modal = document.getElementById('addEmployeeModal');
+    if (modal) {
+        modal.style.display = 'none';
+    }
+}
+
+// Загрузка данных для модального окна
+async function loadReferenceDataForModal() {
+    try {
+        const positions = await safeApiCall(() => api.get('/api/posts'), 'Не удалось загрузить должности');
+        const positionSelect = document.getElementById('empPosition');
+        if (positionSelect) {
+            positionSelect.innerHTML = '<option value="">Не выбрано</option>';
+            positions.forEach(pos => {
+                const option = document.createElement('option');
+                option.value = pos.id;
+                option.textContent = pos.namePost;
+                positionSelect.appendChild(option);
+            });
+        }
+
+        const divisions = await safeApiCall(() => api.get('/api/divisions'), 'Не удалось загрузить отделы');
+        const divisionSelect = document.getElementById('empDivision');
+        if (divisionSelect) {
+            divisionSelect.innerHTML = '<option value="">Не выбрано</option>';
+            divisions.forEach(div => {
+                const option = document.createElement('option');
+                option.value = div.id;
+                option.textContent = div.nameDivision;
+                divisionSelect.appendChild(option);
+            });
+        }
+
+        const buildings = await safeApiCall(() => api.get('/api/buildings'), 'Не удалось загрузить корпуса');
+        const buildingSelect = document.getElementById('empBuilding');
+        if (buildingSelect) {
+            buildingSelect.innerHTML = '<option value="">Не выбрано</option>';
+            buildings.forEach(build => {
+                const option = document.createElement('option');
+                option.value = build.id;
+                option.textContent = build.nameBuilding || build.address || 'Без названия';
+                buildingSelect.appendChild(option);
+            });
+        }
+
+        const roles = await safeApiCall(() => api.get('/api/roles'), 'Не удалось загрузить роли');
+        const roleSelect = document.getElementById('empRole');
+        if (roleSelect) {
+            roleSelect.innerHTML = '<option value="">Не выбрано</option>';
+            roles.forEach(role => {
+                const option = document.createElement('option');
+                option.value = role.id;
+                option.textContent = role.nameRole || role.name;
+                roleSelect.appendChild(option);
+            });
+        }
+
+    } catch (err) {
+        console.error('Ошибка загрузки справочников:', err);
+    }
+}
+
+// Функция сохранения нового сотрудника
+async function saveNewEmployee() {
+    if (!isAdmin()) {
+        showNotification('У вас нет прав для добавления сотрудников', 'error');
+        return;
+    }
+    
+    const password = document.getElementById('empPassword').value;
+    const confirmPassword = document.getElementById('empConfirmPassword').value;
+    
+    if (password !== confirmPassword) {
+        showNotification('Пароли не совпадают', 'error');
+        return;
+    }
+    
+    if (!password || password.length < 4) {
+        showNotification('Пароль должен содержать минимум 4 символа', 'error');
+        return;
+    }
+    
+    const surname = document.getElementById('empSurname').value.trim();
+    const name = document.getElementById('empName').value.trim();
+    const patronymic = document.getElementById('empPatronymic').value.trim();
+    const login = document.getElementById('empLogin').value.trim();
+    
+    if (!surname || !name || !login) {
+        showNotification('Заполните все обязательные поля (Фамилия, Имя, Логин)', 'error');
+        return;
+    }
+    
+    const roleId = document.getElementById('empRole').value;
+    const postId = document.getElementById('empPosition').value;
+    const divisionId = document.getElementById('empDivision').value;
+    const buildingId = document.getElementById('empBuilding').value;
+    
+    const data = {
+        surname, name, patronymic: patronymic || "",
+        login, password,
+        roleId: roleId ? Number(roleId) : null,
+        postId: postId ? Number(postId) : null,
+        divisionId: divisionId ? Number(divisionId) : null,
+        buildingId: buildingId ? Number(buildingId) : null,
+        mobilePhoneNumber: document.getElementById('empMobilePhone').value.trim() || "",
+        landlinePhoneNumber: document.getElementById('empLandlinePhone').value.trim() || "",
+        internalPhoneNumber: document.getElementById('empInternalPhone').value.trim() || "",
+        cabinetNumber: document.getElementById('empCabinet').value.trim() || ""
+    };
+    
+    try {
+        await safeApiCall(
+            () => api.post('/auth/register', data),
+            'Не удалось добавить сотрудника'
+        );
+        
+        showNotification('Сотрудник успешно добавлен', 'success');
+        closeAddEmployeeModal();
+        
+        document.querySelectorAll('#addEmployeeModal input').forEach(i => i.value = '');
+        document.querySelectorAll('#addEmployeeModal select').forEach(s => s.value = '');
+        
+        await loadMyContacts();
+    } catch (err) {
+        console.error('Ошибка при добавлении:', err);
+    }
+}
+
+// Функция экспорта в PDF
+async function exportToPDF() {
+    try {
+        const exportBtn = document.getElementById('exportPdfBtn');
+        const originalText = exportBtn.textContent;
+        exportBtn.textContent = '⏳ Экспорт...';
+        exportBtn.disabled = true;
+        
+        const contacts = Object.values(contactsData);
+        
+        if (contacts.length === 0) {
+            showNotification('Нет контактов для экспорта', 'error');
+            exportBtn.textContent = originalText;
+            exportBtn.disabled = false;
+            return;
+        }
+        
+        const pdfDiv = document.getElementById('pdfContent');
+        const currentDate = new Date().toLocaleString('ru-RU');
+        
+        let html = `
+            <!DOCTYPE html>
+            <html>
+            <head>
+                <meta charset="UTF-8">
+                <title>Phonambula Contacts</title>
+                <style>
+                    body { font-family: 'Arial', 'Helvetica', sans-serif; padding: 20px; background: white; }
+                    h1 { color: #dc3545; text-align: center; font-size: 24px; margin-bottom: 10px; }
+                    .info { text-align: center; color: #666; margin-bottom: 20px; font-size: 12px; }
+                    table { width: 100%; border-collapse: collapse; margin-top: 20px; font-size: 10px; }
+                    th, td { border: 1px solid #ddd; padding: 8px; text-align: left; vertical-align: top; }
+                    th { background-color: #dc3545; color: white; font-weight: bold; font-size: 11px; text-align: center; }
+                    tr:nth-child(even) { background-color: #f9f9f9; }
+                    .footer { text-align: center; margin-top: 20px; color: #999; font-size: 10px; }
+                </style>
+            </head>
+            <body>
+                <h1>Phonambula - Список контактов</h1>
+                <div class="info">Дата генерации: ${escapeHtml(currentDate)}<br>Всего контактов: ${contacts.length}</div>
+                <table>
+                    <thead>
+                        <tr>
+                            <th>ID</th><th>ФИО</th><th>Мобильный</th><th>Городской</th>
+                            <th>Внутренний</th><th>Должность</th><th>Отдел</th><th>Корпус</th><th>Кабинет</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+        `;
+        
+        contacts.forEach(contact => {
+            html += `
+                <tr>
+                    <td style="text-align:center">${escapeHtml(contact.id || '')}</td>
+                    <td>${escapeHtml(contact.name || '—')}</td>
+                    <td>${escapeHtml(contact.mobilePhone || '—')}</td>
+                    <td>${escapeHtml(contact.landlinePhone || '—')}</td>
+                    <td style="text-align:center">${escapeHtml(contact.internalPhone || '—')}</td>
+                    <td>${escapeHtml(contact.position || '—')}</td>
+                    <td>${escapeHtml(contact.department || '—')}</td>
+                    <td>${escapeHtml(contact.building || '—')}</td>
+                    <td style="text-align:center">${escapeHtml(contact.cabinet || '—')}</td>
+                </tr>
+            `;
+        });
+        
+        html += `
+                    </tbody>
+                </table>
+                <div class="footer">* Сгенерировано автоматически в системе Phonambula</div>
+            </body>
+            </html>
+        `;
+        
+        pdfDiv.innerHTML = html;
+        await new Promise(resolve => setTimeout(resolve, 100));
+        
+        const canvas = await html2canvas(pdfDiv, { scale: 2, logging: false, backgroundColor: '#ffffff' });
+        const imgData = canvas.toDataURL('image/png');
+        const { jsPDF } = window.jspdf;
+        
+        const imgWidth = 280;
+        const pageHeight = 297;
+        const imgHeight = (canvas.height * imgWidth) / canvas.width;
+        
+        const doc = new jsPDF({ orientation: imgHeight > pageHeight ? 'portrait' : 'landscape', unit: 'mm', format: 'a4' });
+        
+        if (imgHeight > pageHeight - 20) {
+            let heightLeft = imgHeight, position = 0, page = 1;
+            while (heightLeft > 0) {
+                if (page > 1) doc.addPage();
+                const pageCanvas = document.createElement('canvas');
+                pageCanvas.width = canvas.width;
+                pageCanvas.height = Math.min(canvas.height - position, (pageHeight - 20) * canvas.width / imgWidth);
+                const ctx = pageCanvas.getContext('2d');
+                ctx.drawImage(canvas, 0, position, canvas.width, pageCanvas.height, 0, 0, pageCanvas.width, pageCanvas.height);
+                doc.addImage(pageCanvas.toDataURL('image/png'), 'PNG', 10, 10, imgWidth, pageCanvas.height * imgWidth / canvas.width);
+                position += pageCanvas.height;
+                heightLeft -= pageCanvas.height;
+                page++;
+            }
+        } else {
+            doc.addImage(imgData, 'PNG', 10, 10, imgWidth, imgHeight);
+        }
+        
+        doc.save(`contacts_${new Date().toISOString().slice(0, 10)}.pdf`);
+        pdfDiv.innerHTML = '';
+        exportBtn.textContent = originalText;
+        exportBtn.disabled = false;
+        showNotification(`✅ Экспорт завершен! Сохранено ${contacts.length} контактов`, 'success');
+        
+    } catch (error) {
+        console.error('Ошибка при экспорте PDF:', error);
+        showNotification('Ошибка при экспорте PDF: ' + error.message, 'error');
+        const exportBtn = document.getElementById('exportPdfBtn');
+        if (exportBtn) {
+            exportBtn.textContent = '📄 Экспорт в PDF';
+            exportBtn.disabled = false;
+        }
+    }
+}
+
+// Функция переключения категории
+function toggleCategory(element) {
+    element.classList.toggle('expanded');
+    const subList = element.nextElementSibling;
+    if (subList) {
+        subList.style.display = element.classList.contains('expanded') ? 'block' : 'none';
+    }
+}
+
+// Функция редактирования поля
 function makeEditable(div, field) {
+    if (!isAdmin()) return;
+    
     div.removeAttribute('onclick');
 
     const originalValue = div.innerText === '—' ? '' : div.innerText.trim();
@@ -243,7 +806,6 @@ function makeEditable(div, field) {
     input.focus();
 
     const saveEdit = () => {
-
         const newDiv = document.createElement('div');
         newDiv.className = 'detail-value clickable';
         newDiv.innerText = input.value.trim() || '—';
@@ -254,12 +816,10 @@ function makeEditable(div, field) {
         newDiv.setAttribute('onclick', `makeEditable(this,'${field}')`);
 
         input.replaceWith(newDiv);
-
         showSaveBtn();
     };
 
     input.addEventListener('blur', saveEdit);
-
     input.addEventListener('keypress', e => {
         if (e.key === 'Enter') {
             e.preventDefault();
@@ -268,10 +828,14 @@ function makeEditable(div, field) {
     });
 }
 
-async function editReference(type, currentId) {
+// Функция редактирования справочника
+async function editReference(type, currentId, currentName) {
+    if (!isAdmin()) {
+        showNotification('У вас нет прав для редактирования', 'error');
+        return;
+    }
 
     let modal = document.getElementById('referenceModal');
-
     if (!modal) {
         modal = document.createElement('div');
         modal.id = 'referenceModal';
@@ -283,56 +847,41 @@ async function editReference(type, currentId) {
     modal.style.display = 'flex';
 
     try {
-
         let endpoint = '';
         let title = '';
 
         if (type === 'position') {
             endpoint = '/api/posts';
             title = 'Выберите должность';
-        }
-
-        if (type === 'department') {
+        } else if (type === 'department') {
             endpoint = '/api/divisions';
             title = 'Выберите отдел';
-        }
-
-        if (type === 'building') {
+        } else if (type === 'building') {
             endpoint = '/api/buildings';
             title = 'Выберите корпус';
         }
 
-        const rawItems = await api.get(endpoint);
+        const rawItems = await safeApiCall(() => api.get(endpoint), 'Не удалось загрузить данные');
 
         const items = rawItems.map(item => {
-
             let name = '';
-
             if (type === 'position') name = item.namePost;
             if (type === 'department') name = item.nameDivision;
             if (type === 'building') name = item.nameBuilding || item.address;
-
-            return {
-                id: item.id,
-                name: name || '—'
-            };
-
+            return { id: item.id, name: name || '—' };
         }).sort((a, b) => a.name.localeCompare(b.name));
 
         modal.innerHTML = `
             <div class="modal-content">
-                <h3>${title}</h3>
-
+                <h3>${escapeHtml(title)}</h3>
                 <input type="text" id="referenceSearch" class="modal-search" placeholder="Поиск...">
-
                 <select id="referenceSelect" class="modal-select" size="8">
-                    ${items.map(it =>
-                        `<option value="${it.id}" ${it.id == currentId ? 'selected' : ''}>
-                            ${it.name}
-                        </option>`
-                    ).join('')}
+                    ${items.map(it => `
+                        <option value="${it.id}" ${it.id == currentId ? 'selected' : ''}>
+                            ${escapeHtml(it.name)}
+                        </option>
+                    `).join('')}
                 </select>
-
                 <div class="modal-buttons">
                     <button class="modal-save" onclick="saveReference('${type}')">Сохранить</button>
                     <button class="modal-cancel" onclick="closeReferenceModal()">Отмена</button>
@@ -351,9 +900,6 @@ async function editReference(type, currentId) {
         });
 
     } catch (err) {
-
-        console.error(err);
-
         modal.innerHTML = `
             <div class="modal-content">
                 <h3>Ошибка</h3>
@@ -363,45 +909,42 @@ async function editReference(type, currentId) {
     }
 }
 
+// Функция сохранения выбранного справочника
 function saveReference(type) {
-
     const select = document.getElementById('referenceSelect');
-
     if (!select.value) return;
 
     const id = select.value;
     const name = select.options[select.selectedIndex].text;
 
     const div = document.querySelector(`[data-field="${type}"]`);
-
     div.textContent = name;
     div.dataset.id = id;
 
     showSaveBtn();
-
     closeReferenceModal();
+    showNotification('Изменение сохранено, нажмите "Сохранить изменения"', 'success');
 }
 
+// Функция закрытия модального окна справочника
 function closeReferenceModal() {
-
     const modal = document.getElementById('referenceModal');
-
-    modal.style.display = 'none';
-    modal.innerHTML = '';
-}
-
-function showSaveBtn() {
-
-    const btn = document.getElementById('saveBtn');
-
-    if (btn) {
-        btn.style.display = 'inline-block';
+    if (modal) {
+        modal.style.display = 'none';
+        modal.innerHTML = '';
     }
 }
 
+// Функция показа кнопки сохранения
+function showSaveBtn() {
+    const btn = document.getElementById('saveBtn');
+    if (btn) btn.style.display = 'inline-block';
+}
+
+// Функция сохранения контакта
 async function saveContact() {
     if (!isAdmin()) {
-        alert('У вас нет прав для редактирования контактов');
+        showNotification('У вас нет прав для редактирования контактов', 'error');
         return;
     }
     if (!editedContactId) return;
@@ -420,7 +963,6 @@ async function saveContact() {
 
     const data = {};
 
-    // Простые поля
     const simpleFields = {
         'mobilePhone': 'mobilePhoneNumber',
         'landlinePhone': 'landlinePhoneNumber',
@@ -435,454 +977,43 @@ async function saveContact() {
         }
     });
 
-    // Справочники (только если изменился ID)
-    if (getId('position') !== null) {
-        data.postId = getId('position');
-    }
-    if (getId('department') !== null) {
-        data.departmentId = getId('department');
-    }
-    if (getId('building') !== null) {
-        data.buildingId = getId('building');
-    }
+    if (getId('position') !== null) data.postId = getId('position');
+    if (getId('department') !== null) data.departmentId = getId('department');
+    if (getId('building') !== null) data.buildingId = getId('building');
 
     if (Object.keys(data).length === 0) {
-        alert('Нет изменений');
+        showNotification('Нет изменений для сохранения', 'info');
         return;
     }
 
     try {
-        const response = await api.put(`/api/subscribers/${editedContactId}`, data);
-        // Обновляем локальные данные
+        const response = await safeApiCall(
+            () => api.put(`/api/subscribers/${editedContactId}`, data),
+            'Не удалось сохранить изменения'
+        );
+        
         Object.assign(contactsData[editedContactId], response);
         showContactDetails(editedContactId);
         document.getElementById('saveBtn').style.display = 'none';
-        alert('Сохранено');
+        showNotification('Изменения успешно сохранены', 'success');
     } catch (err) {
         console.error(err);
-        alert('Ошибка сохранения: ' + (err.message || '403/400/500'));
     }
 }
 
-async function deleteContact(event, id) {
-    event.stopPropagation();
-    
-    // Проверяем права
-    if (!isAdmin()) {
-        alert('У вас нет прав для удаления контактов');
-        return;
-    }
-
-    if (!confirm('Удалить контакт?')) return;
-
-    try {
-        await api.delete(`/api/subscribers/${id}`);
-        alert('Контакт удалён');
-
-        if (String(id) === String(editedContactId)) {
-            editedContactId = null;
-        }
-
-        await loadMyContacts();
-    } catch (err) {
-        console.error(err);
-        alert('Ошибка удаления');
-    }
-}
-
-async function openAddEmployeeModal() {
-    // Загружаем данные перед открытием
-    await loadReferenceDataForModal();
-    document.getElementById('addEmployeeModal').style.display = 'flex';
-}
-
-function closeAddEmployeeModal() {
-    document.getElementById('addEmployeeModal').style.display = 'none';
-}
-
-async function loadReferenceDataForModal() {
-    try {
-        // Загружаем должности
-        const positions = await api.get('/api/posts');
-        const positionSelect = document.getElementById('empPosition');
-        if (positionSelect) {
-            positionSelect.innerHTML = '<option value="">Не выбрано</option>';
-            positions.forEach(pos => {
-                const option = document.createElement('option');
-                option.value = pos.id;
-                option.textContent = pos.namePost;
-                positionSelect.appendChild(option);
-            });
-        }
-
-        // Загружаем отделы
-        const divisions = await api.get('/api/divisions');
-        const divisionSelect = document.getElementById('empDivision');
-        if (divisionSelect) {
-            divisionSelect.innerHTML = '<option value="">Не выбрано</option>';
-            divisions.forEach(div => {
-                const option = document.createElement('option');
-                option.value = div.id;
-                option.textContent = div.nameDivision;
-                divisionSelect.appendChild(option);
-            });
-        }
-
-        // Загружаем корпуса
-        const buildings = await api.get('/api/buildings');
-        const buildingSelect = document.getElementById('empBuilding');
-        if (buildingSelect) {
-            buildingSelect.innerHTML = '<option value="">Не выбрано</option>';
-            buildings.forEach(build => {
-                const option = document.createElement('option');
-                option.value = build.id;
-                option.textContent = build.nameBuilding || build.address || 'Без названия';
-                buildingSelect.appendChild(option);
-            });
-        }
-
-        // Загружаем роли
-        const roles = await api.get('/api/roles');
-        const roleSelect = document.getElementById('empRole');
-        if (roleSelect) {
-            roleSelect.innerHTML = '<option value="">Не выбрано</option>';
-            roles.forEach(role => {
-                const option = document.createElement('option');
-                option.value = role.id;
-                // Используем правильное поле из модели Role
-                option.textContent = role.nameRole || role.name;
-                roleSelect.appendChild(option);
-            });
-        }
-
-    } catch (err) {
-        console.error('Ошибка загрузки справочников:', err);
-        alert('Ошибка загрузки данных: ' + err.message);
-    }
-}
-
-
-async function saveNewEmployee() {
-
-    if (!isAdmin()) {
-        alert('У вас нет прав для добавления сотрудников');
-        return;
-    }
-    // Проверка паролей
-    const password = document.getElementById('empPassword').value;
-    const confirmPassword = document.getElementById('empConfirmPassword').value;
-    
-    if (password !== confirmPassword) {
-        alert('Пароли не совпадают');
-        return;
-    }
-    
-    if (!password || password.length < 4) {
-        alert('Пароль должен содержать минимум 4 символа');
-        return;
-    }
-    
-    const surname = document.getElementById('empSurname').value.trim();
-    const name = document.getElementById('empName').value.trim();
-    const patronymic = document.getElementById('empPatronymic').value.trim();
-    const login = document.getElementById('empLogin').value.trim();
-    
-    if (!surname || !name || !login) {
-        alert('Пожалуйста, заполните все обязательные поля (Фамилия, Имя, Логин)');
-        return;
-    }
-    
-    // Получаем значения из select
-    const roleId = document.getElementById('empRole').value;
-    const postId = document.getElementById('empPosition').value;
-    const divisionId = document.getElementById('empDivision').value;
-    const buildingId = document.getElementById('empBuilding').value;
-    
-    // Собираем данные для отправки
-    const data = {
-        // Поля для создания пользователя
-        surname: surname,
-        name: name,
-        patronymic: patronymic || "",
-        login: login,
-        password: password,
-        roleId: roleId ? Number(roleId) : null,
-        
-        // Поля для создания абонента
-        postId: postId ? Number(postId) : null,
-        divisionId: divisionId ? Number(divisionId) : null,
-        buildingId: buildingId ? Number(buildingId) : null,
-        
-        // Телефоны и кабинет
-        mobilePhoneNumber: document.getElementById('empMobilePhone').value.trim() || "",
-        landlinePhoneNumber: document.getElementById('empLandlinePhone').value.trim() || "",
-        internalPhoneNumber: document.getElementById('empInternalPhone').value.trim() || "",
-        cabinetNumber: document.getElementById('empCabinet').value.trim() || ""
-    };
-    
-    try {
-        console.log('Отправка данных:', data);
-        
-        // Отправляем запрос на регистрацию
-        const response = await api.post('/auth/register', data);
-        
-        console.log('Ответ сервера:', response);
-        alert('Сотрудник успешно добавлен');
-        closeAddEmployeeModal();
-        
-        // Очистка формы
-        document.querySelectorAll('#addEmployeeModal input').forEach(i => i.value = '');
-        document.querySelectorAll('#addEmployeeModal select').forEach(s => s.value = '');
-        
-        // Сохраняем токен, если он вернулся
-        if (response.token) {
-            api.setToken(response.token);
-        }
-        
-        // Перезагружаем список контактов
-        await loadMyContacts();
-        
-    } catch (err) {
-        console.error('Ошибка при добавлении:', err);
-        alert('Ошибка добавления: ' + (err.message || 'Сервер не ответил'));
-    }
-}
-
-async function exportToPDF() {
-    try {
-        const exportBtn = document.getElementById('exportPdfBtn');
-        const originalText = exportBtn.textContent;
-        exportBtn.textContent = '⏳ Экспорт...';
-        exportBtn.disabled = true;
-        
-        const contacts = Object.values(contactsData);
-        
-        if (contacts.length === 0) {
-            alert('Нет контактов для экспорта');
-            exportBtn.textContent = originalText;
-            exportBtn.disabled = false;
-            return;
-        }
-        
-        // Создаем HTML таблицу для экспорта с правильной кодировкой
-        const pdfDiv = document.getElementById('pdfContent');
-        const currentDate = new Date().toLocaleString('ru-RU');
-        
-        let html = `
-            <!DOCTYPE html>
-            <html>
-            <head>
-                <meta charset="UTF-8">
-                <style>
-                    * {
-                        margin: 0;
-                        padding: 0;
-                        box-sizing: border-box;
-                    }
-                    body {
-                        font-family: 'Arial', 'Helvetica', sans-serif;
-                        padding: 20px;
-                        background: white;
-                    }
-                    h1 {
-                        color: #dc3545;
-                        text-align: center;
-                        font-size: 24px;
-                        margin-bottom: 10px;
-                    }
-                    .info {
-                        text-align: center;
-                        color: #666;
-                        margin-bottom: 20px;
-                        font-size: 12px;
-                    }
-                    table {
-                        width: 100%;
-                        border-collapse: collapse;
-                        margin-top: 20px;
-                        font-size: 10px;
-                    }
-                    th, td {
-                        border: 1px solid #ddd;
-                        padding: 8px;
-                        text-align: left;
-                        vertical-align: top;
-                    }
-                    th {
-                        background-color: #dc3545;
-                        color: white;
-                        font-weight: bold;
-                        font-size: 11px;
-                        text-align: center;
-                    }
-                    tr:nth-child(even) {
-                        background-color: #f9f9f9;
-                    }
-                    .footer {
-                        text-align: center;
-                        margin-top: 20px;
-                        color: #999;
-                        font-size: 10px;
-                    }
-                    .page-break {
-                        page-break-before: always;
-                    }
-                </style>
-            </head>
-            <body>
-                <h1>Phonambula - Список контактов</h1>
-                <div class="info">
-                    Дата генерации: ${currentDate}<br>
-                    Всего контактов: ${contacts.length}
-                </div>
-                <table>
-                    <thead>
-                        <tr>
-                            <th style="width: 5%">ID</th>
-                            <th style="width: 15%">ФИО</th>
-                            <th style="width: 12%">Мобильный</th>
-                            <th style="width: 12%">Городской</th>
-                            <th style="width: 10%">Внутренний</th>
-                            <th style="width: 12%">Должность</th>
-                            <th style="width: 12%">Отдел</th>
-                            <th style="width: 10%">Корпус</th>
-                            <th style="width: 7%">Кабинет</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-        `;
-        
-        contacts.forEach(contact => {
-            html += `
-                <tr>
-                    <td style="text-align: center">${contact.id || ''}</td>
-                    <td>${escapeHtml(contact.name || '—')}</td>
-                    <td>${escapeHtml(contact.mobilePhone || '—')}</td>
-                    <td>${escapeHtml(contact.landlinePhone || '—')}</td>
-                    <td style="text-align: center">${escapeHtml(contact.internalPhone || '—')}</td>
-                    <td>${escapeHtml(contact.position || '—')}</td>
-                    <td>${escapeHtml(contact.department || '—')}</td>
-                    <td>${escapeHtml(contact.building || '—')}</td>
-                    <td style="text-align: center">${escapeHtml(contact.cabinet || '—')}</td>
-                </tr>
-            `;
-        });
-        
-        html += `
-                    </tbody>
-                </table>
-                <div class="footer">
-                    * Сгенерировано автоматически в системе Phonambula
-                </div>
-            </body>
-            </html>
-        `;
-        
-        pdfDiv.innerHTML = html;
-        
-        // Ждем немного для рендеринга
-        await new Promise(resolve => setTimeout(resolve, 100));
-        
-        // Преобразуем HTML в изображение
-        const canvas = await html2canvas(pdfDiv, {
-            scale: 2,
-            logging: false,
-            useCORS: true,
-            backgroundColor: '#ffffff',
-            onclone: (clonedDoc, element) => {
-                // Дополнительная настройка стилей при клонировании
-                const style = clonedDoc.createElement('style');
-                style.textContent = `
-                    table {
-                        width: 100%;
-                        border-collapse: collapse;
-                    }
-                    th, td {
-                        border: 1px solid #ddd;
-                        padding: 8px;
-                    }
-                `;
-                clonedDoc.head.appendChild(style);
-            }
-        });
-        
-        const imgData = canvas.toDataURL('image/png');
-        const { jsPDF } = window.jspdf;
-        
-        // Создаем PDF с учетом размеров
-        const imgWidth = 280; // мм
-        const pageHeight = 297; // мм
-        const imgHeight = (canvas.height * imgWidth) / canvas.width;
-        
-        const doc = new jsPDF({
-            orientation: imgHeight > pageHeight ? 'portrait' : 'landscape',
-            unit: 'mm',
-            format: 'a4'
-        });
-        
-        // Если изображение не помещается на одну страницу, разбиваем
-        if (imgHeight > pageHeight - 20) {
-            let heightLeft = imgHeight;
-            let position = 0;
-            let page = 1;
-            
-            while (heightLeft > 0) {
-                if (page > 1) {
-                    doc.addPage();
-                }
-                
-                const pageCanvas = document.createElement('canvas');
-                pageCanvas.width = canvas.width;
-                pageCanvas.height = Math.min(canvas.height - position, (pageHeight - 20) * canvas.width / imgWidth);
-                
-                const ctx = pageCanvas.getContext('2d');
-                ctx.drawImage(
-                    canvas,
-                    0, position,
-                    canvas.width, pageCanvas.height,
-                    0, 0,
-                    pageCanvas.width, pageCanvas.height
-                );
-                
-                const pageImgData = pageCanvas.toDataURL('image/png');
-                doc.addImage(pageImgData, 'PNG', 10, 10, imgWidth, pageCanvas.height * imgWidth / canvas.width);
-                
-                position += pageCanvas.height;
-                heightLeft -= pageCanvas.height;
-                page++;
-            }
-        } else {
-            doc.addImage(imgData, 'PNG', 10, 10, imgWidth, imgHeight);
-        }
-        
-        // Сохраняем PDF
-        doc.save(`contacts_${new Date().toISOString().slice(0, 10)}.pdf`);
-        
-        // Очищаем временный div
-        pdfDiv.innerHTML = '';
-        
-        exportBtn.textContent = originalText;
-        exportBtn.disabled = false;
-        
-        alert(`✅ Экспорт завершен! Сохранено ${contacts.length} контактов`);
-        
-    } catch (error) {
-        console.error('Ошибка при экспорте PDF:', error);
-        alert('❌ Ошибка при экспорте PDF: ' + error.message);
-        
-        const exportBtn = document.getElementById('exportPdfBtn');
-        exportBtn.textContent = '📄 Экспорт в PDF';
-        exportBtn.disabled = false;
-    }
-}
-
-// Функция для экранирования HTML специальных символов
-function escapeHtml(text) {
-    if (!text) return '';
-    const div = document.createElement('div');
-    div.textContent = text;
-    return div.innerHTML;
-}
+// Экспортируем функции в глобальную область видимости
+window.deleteContact = deleteContact;
+window.openAddEmployeeModal = openAddEmployeeModal;
+window.closeAddEmployeeModal = closeAddEmployeeModal;
+window.saveNewEmployee = saveNewEmployee;
+window.exportToPDF = exportToPDF;
+window.toggleCategory = toggleCategory;
+window.selectContact = selectContact;
+window.makeEditable = makeEditable;
+window.editReference = editReference;
+window.saveReference = saveReference;
+window.closeReferenceModal = closeReferenceModal;
+window.saveContact = saveContact;
 
 window.addEventListener('DOMContentLoaded', async () => {
     if (!api.isAuthenticated()) {
@@ -891,20 +1022,30 @@ window.addEventListener('DOMContentLoaded', async () => {
     }
     
     try {
-        // Всегда получаем актуальную роль из API
-        const userInfo = await api.get('/api/users/me');
+        const userInfo = await safeApiCall(() => api.get('/api/users/me'), 'Не удалось получить данные пользователя');
         currentUserRole = userInfo.role;
         localStorage.setItem('userRole', currentUserRole);
-        console.log('Current user role from API:', currentUserRole);
+        console.log('User role:', currentUserRole);
     } catch (err) {
-        console.error('Failed to get user role:', err);
-        // Если не удалось получить роль, пробуем из localStorage
         currentUserRole = localStorage.getItem('userRole');
         if (!currentUserRole) {
-            alert('Ошибка загрузки данных пользователя');
-            window.location.href = '/login.html';
+            showNotification('Ошибка загрузки данных пользователя', 'error');
+            setTimeout(() => {
+                window.location.href = '/login.html';
+            }, 1500);
             return;
         }
+    }
+    
+    const searchInput = document.getElementById('searchInput');
+    const clearBtn = document.getElementById('clearSearchBtn');
+    
+    if (searchInput) {
+        searchInput.addEventListener('input', handleSearch);
+    }
+    
+    if (clearBtn) {
+        clearBtn.addEventListener('click', clearSearch);
     }
     
     loadMyContacts();

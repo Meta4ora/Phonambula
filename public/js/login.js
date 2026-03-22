@@ -1,3 +1,49 @@
+// Функция для показа красивых уведомлений
+function showNotification(message, type = 'error') {
+    // Удаляем существующее уведомление
+    const existingNotification = document.querySelector('.custom-notification');
+    if (existingNotification) {
+        existingNotification.remove();
+    }
+    
+    // Создаем элемент уведомления
+    const notification = document.createElement('div');
+    notification.className = `custom-notification custom-notification-${type}`;
+    
+    // Иконка в зависимости от типа
+    const icons = {
+        success: '✓',
+        error: '✗',
+        info: 'ℹ',
+        warning: '⚠'
+    };
+    
+    notification.innerHTML = `
+        <div class="notification-content">
+            <span class="notification-icon">${icons[type] || icons.error}</span>
+            <span class="notification-message">${message}</span>
+        </div>
+    `;
+    
+    document.body.appendChild(notification);
+    
+    // Автоматическое закрытие через 3 секунды
+    setTimeout(() => {
+        notification.style.animation = 'slideOutRight 0.3s ease forwards';
+        setTimeout(() => {
+            if (notification.parentNode) notification.remove();
+        }, 300);
+    }, 3000);
+    
+    // Закрытие по клику
+    notification.addEventListener('click', () => {
+        notification.style.animation = 'slideOutRight 0.3s ease forwards';
+        setTimeout(() => {
+            if (notification.parentNode) notification.remove();
+        }, 300);
+    });
+}
+
 function showRegister(pushState = true) {
     const loginCard = document.getElementById('loginCard');
     const registerCard = document.getElementById('registerCard');
@@ -32,6 +78,12 @@ async function handleLogin() {
     const login = document.getElementById('phone-login').value;
     const password = document.getElementById('password-login').value;
 
+    // Валидация полей
+    if (!login || !password) {
+        showNotification('Пожалуйста, заполните все поля', 'warning');
+        return;
+    }
+
     try {
         const data = await api.post('/auth/login', {
             login,
@@ -40,15 +92,31 @@ async function handleLogin() {
 
         api.setToken(data.token);
         
-        // Сохраняем роль пользователя
         localStorage.setItem('userName', data.login);
         localStorage.setItem('userLogin', data.login);
-        localStorage.setItem('userRole', data.role); // Сохраняем роль
+        localStorage.setItem('userRole', data.role);
 
-        window.location.href = '/home.html';
+        showNotification(`Добро пожаловать, ${data.login}!`, 'success');
+        
+        setTimeout(() => {
+            window.location.href = '/home.html';
+        }, 500);
 
     } catch (error) {
-        alert(error.message || 'Ошибка входа');
+        console.error('Login error:', error);
+        
+        // Обработка разных типов ошибок
+        if (error.message === 'HTTP 401' || error.message.includes('401')) {
+            showNotification('Неверный логин или пароль. Попробуйте снова.', 'error');
+        } else if (error.message === 'HTTP 403') {
+            showNotification('Доступ запрещен. Обратитесь к администратору.', 'error');
+        } else if (error.message === 'HTTP 500') {
+            showNotification('Ошибка сервера. Попробуйте позже.', 'error');
+        } else if (error.message && error.message.includes('Неверный')) {
+            showNotification(error.message, 'error');
+        } else {
+            showNotification('Ошибка подключения к серверу. Проверьте соединение.', 'error');
+        }
     }
 }
 
@@ -58,18 +126,23 @@ async function handleRegister() {
     const password = document.getElementById('password-reg').value;
     const confirmPassword = document.getElementById('confirm-password').value;
 
+    // Валидация полей
     if (!name || !login || !password) {
-        alert('Заполните все поля');
+        showNotification('Пожалуйста, заполните все обязательные поля', 'warning');
         return;
     }
 
     if (password !== confirmPassword) {
-        alert('Пароли не совпадают');
+        showNotification('Пароли не совпадают', 'error');
+        return;
+    }
+
+    if (password.length < 4) {
+        showNotification('Пароль должен содержать минимум 4 символа', 'warning');
         return;
     }
 
     try {
-        // Разделяем имя на части
         const nameParts = name.trim().split(' ');
         let surname = '';
         let firstName = '';
@@ -92,7 +165,7 @@ async function handleRegister() {
             patronymic: patronymic,
             login: login,
             password: password,
-            roleId: null,  // По умолчанию без роли
+            roleId: null,
             buildingId: null,
             divisionId: null,
             postId: null
@@ -102,41 +175,62 @@ async function handleRegister() {
         localStorage.setItem('userName', data.login || login);
         localStorage.setItem('userLogin', data.login || login);
 
-        window.location.href = '/home.html';
+        showNotification('Регистрация успешно завершена!', 'success');
+        
+        setTimeout(() => {
+            window.location.href = '/home.html';
+        }, 500);
 
     } catch (error) {
         console.error('Registration error:', error);
-        alert(error.message || 'Ошибка регистрации');
+        
+        if (error.message && error.message.includes('уже существует')) {
+            showNotification('Пользователь с таким логином уже существует', 'error');
+        } else if (error.message === 'HTTP 400') {
+            showNotification('Некорректные данные. Проверьте введенную информацию.', 'error');
+        } else if (error.message === 'HTTP 500') {
+            showNotification('Ошибка сервера. Попробуйте позже.', 'error');
+        } else {
+            showNotification(error.message || 'Ошибка регистрации. Попробуйте позже.', 'error');
+        }
     }
 }
 
 window.addEventListener('DOMContentLoaded', () => {
+    const loginBtn = document.getElementById('loginBtn');
+    const registerBtn = document.getElementById('registerBtn');
+    const goRegister = document.getElementById('goRegister');
+    const goLogin = document.getElementById('goLogin');
 
-    // Кнопки
-    document.getElementById('loginBtn')
-        .addEventListener('click', handleLogin);
+    if (loginBtn) loginBtn.addEventListener('click', handleLogin);
+    if (registerBtn) registerBtn.addEventListener('click', handleRegister);
+    if (goRegister) goRegister.addEventListener('click', () => showRegister(true));
+    if (goLogin) goLogin.addEventListener('click', () => showLogin(true));
 
-    document.getElementById('registerBtn')
-        .addEventListener('click', handleRegister);
-
-    // Переключатели
-    document.getElementById('goRegister')
-        .addEventListener('click', () => showRegister(true));
-
-    document.getElementById('goLogin')
-        .addEventListener('click', () => showLogin(true));
-
-    // Проверка URL при загрузке
     const params = new URLSearchParams(window.location.search);
     if (params.get('form') === 'register') {
         showRegister(false);
     }
-
+    
+    // Добавляем обработку Enter
+    const loginInput = document.getElementById('phone-login');
+    const passwordInput = document.getElementById('password-login');
+    
+    if (loginInput) {
+        loginInput.addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') handleLogin();
+        });
+    }
+    
+    if (passwordInput) {
+        passwordInput.addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') handleLogin();
+        });
+    }
 });
 
 window.addEventListener('popstate', () => {
     const params = new URLSearchParams(window.location.search);
-
     if (params.get('form') === 'register') {
         showRegister(false);
     } else {
@@ -181,19 +275,23 @@ function switchToLogin() {
 }
 
 async function goToStep2() {
-
     const name = document.getElementById("name").value.trim();
     const login = document.getElementById("login").value.trim();
     const password = document.getElementById("password").value;
     const confirmPassword = document.getElementById("confirmPassword").value;
 
     if (!name || !login || !password) {
-        alert("Заполните все поля");
+        showNotification("Заполните все поля", "warning");
         return;
     }
 
     if (password !== confirmPassword) {
-        alert("Пароли не совпадают");
+        showNotification("Пароли не совпадают", "error");
+        return;
+    }
+
+    if (password.length < 4) {
+        showNotification("Пароль должен содержать минимум 4 символа", "warning");
         return;
     }
 
@@ -233,20 +331,27 @@ function backToStep1() {
 }
 
 async function loadDropdowns() {
-    const roles = await api.get("/api/roles");
-    const buildings = await api.get("/api/buildings");
-    const divisions = await api.get("/api/divisions");
-    const posts = await api.get("/api/posts");
+    try {
+        const roles = await api.get("/api/roles");
+        const buildings = await api.get("/api/buildings");
+        const divisions = await api.get("/api/divisions");
+        const posts = await api.get("/api/posts");
 
-    fillSelect("roleSelect", roles, "id", "nameRole");
-    fillSelect("buildingSelect", buildings, "id", "nameBuilding");
-    fillSelect("divisionSelect", divisions, "id", "nameDivision");
-    fillSelect("postSelect", posts, "id", "namePost");
+        fillSelect("roleSelect", roles, "id", "nameRole");
+        fillSelect("buildingSelect", buildings, "id", "nameBuilding");
+        fillSelect("divisionSelect", divisions, "id", "nameDivision");
+        fillSelect("postSelect", posts, "id", "namePost");
+    } catch (error) {
+        console.error('Error loading dropdowns:', error);
+        showNotification('Не удалось загрузить данные для формы', 'error');
+    }
 }
 
 function fillSelect(id, data, valueField, textField) {
     const select = document.getElementById(id);
-    select.innerHTML = "";
+    if (!select) return;
+    
+    select.innerHTML = '<option value="">Не выбрано</option>';
 
     data.forEach(item => {
         const option = document.createElement("option");
@@ -258,13 +363,16 @@ function fillSelect(id, data, valueField, textField) {
 
 async function finishRegistration() {
     try {
-        // Получаем значения из select
         const roleSelect = document.getElementById("roleSelect");
         const buildingSelect = document.getElementById("buildingSelect");
         const divisionSelect = document.getElementById("divisionSelect");
         const postSelect = document.getElementById("postSelect");
         
-        // Разделяем ФИО на части
+        if (!tempRegisterData) {
+            showNotification('Данные регистрации не найдены', 'error');
+            return;
+        }
+        
         const fullName = tempRegisterData.name.trim();
         const nameParts = fullName.split(' ');
         
@@ -289,13 +397,11 @@ async function finishRegistration() {
             patronymic: patronymic,
             login: tempRegisterData.login,
             password: tempRegisterData.password,
-            roleId: roleSelect ? Number(roleSelect.value) : null,
-            buildingId: buildingSelect ? Number(buildingSelect.value) : null,
-            divisionId: divisionSelect ? Number(divisionSelect.value) : null,
-            postId: postSelect ? Number(postSelect.value) : null
+            roleId: roleSelect && roleSelect.value ? Number(roleSelect.value) : null,
+            buildingId: buildingSelect && buildingSelect.value ? Number(buildingSelect.value) : null,
+            divisionId: divisionSelect && divisionSelect.value ? Number(divisionSelect.value) : null,
+            postId: postSelect && postSelect.value ? Number(postSelect.value) : null
         };
-        
-        console.log('Sending registration data:', requestData);
         
         const response = await api.post("/auth/register", requestData);
         
@@ -303,14 +409,24 @@ async function finishRegistration() {
             api.setToken(response.token);
             localStorage.setItem('userName', response.login || tempRegisterData.name);
             localStorage.setItem('userLogin', response.login || tempRegisterData.login);
-            window.location.href = "/home.html";
+            
+            showNotification('Регистрация успешно завершена!', 'success');
+            
+            setTimeout(() => {
+                window.location.href = "/home.html";
+            }, 500);
         } else {
             throw new Error('Не получен токен авторизации');
         }
         
     } catch (error) {
         console.error('Registration error:', error);
-        alert('Ошибка регистрации: ' + (error.message || 'Попробуйте позже'));
+        
+        if (error.message && error.message.includes('уже существует')) {
+            showNotification('Пользователь с таким логином уже существует', 'error');
+        } else {
+            showNotification(error.message || 'Ошибка регистрации. Попробуйте позже.', 'error');
+        }
     }
 }
 
@@ -320,7 +436,7 @@ async function login() {
         const passwordValue = document.getElementById("passwordAuth").value;
         
         if (!loginValue || !passwordValue) {
-            alert('Заполните все поля');
+            showNotification('Заполните все поля', 'warning');
             return;
         }
         
@@ -333,13 +449,25 @@ async function login() {
             api.setToken(response.token);
             localStorage.setItem('userName', response.login || loginValue);
             localStorage.setItem('userLogin', response.login || loginValue);
-            window.location.href = "/home.html";
+            
+            showNotification('Вход выполнен успешно!', 'success');
+            
+            setTimeout(() => {
+                window.location.href = "/home.html";
+            }, 500);
         } else {
             throw new Error('Не получен токен авторизации');
         }
         
     } catch (error) {
         console.error('Login error:', error);
-        alert('Ошибка входа: ' + (error.message || 'Неверный логин или пароль'));
+        
+        if (error.message === 'HTTP 401' || error.message.includes('401')) {
+            showNotification('Неверный логин или пароль', 'error');
+        } else if (error.message === 'HTTP 403') {
+            showNotification('Доступ запрещен', 'error');
+        } else {
+            showNotification(error.message || 'Ошибка входа. Попробуйте позже.', 'error');
+        }
     }
 }

@@ -13,11 +13,17 @@
         <div class="contacts-sidebar">
             <div class="sidebar-header">
                 <h3>Контакты</h3>
-                
             </div>
+            
+            <!-- Добавляем поле поиска -->
+            <div class="search-container">
+                <input type="text" id="searchInput" class="search-input" placeholder="🔍 Поиск по имени, телефону, должности...">
+                <button id="clearSearchBtn" class="clear-search-btn" style="display: none;">✕</button>
+            </div>
+            
             <button onclick="openAddEmployeeModal()" id="addEmployeeBtn" class="add-employee-btn">
-                    Добавить сотрудника
-                </button>
+                Добавить сотрудника
+            </button>
             <ul class="contact-tree">
                 <!-- Динамическое содержимое -->
             </ul>
