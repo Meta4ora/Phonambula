@@ -26,6 +26,10 @@
         <div class="contact-details" id="contactDetails"></div>
     </div>
 
+    <button id="exportPdfBtn" class="export-pdf-btn" onclick="exportToPDF()">
+        📄 Экспорт в PDF
+    </button>
+
     <!-- Модальное окно для добавления сотрудника -->
     <div id="addEmployeeModal" class="modal" style="display: none;">
         <div class="modal-content add-employee-modal">
@@ -110,8 +114,13 @@
         </div>
     </div>
 
+    <!-- Скрытый div для генерации PDF -->
+<div id="pdfContent" style="position: absolute; left: -9999px; top: -9999px; width: 1200px; padding: 20px; background: white; font-family: Arial, sans-serif;"></div>
+
     <script src="js/api.js"></script>
     <script src="js/home.js"></script>
-
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.31/jspdf.plugin.autotable.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
 </body>
 </html>

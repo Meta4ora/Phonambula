@@ -648,6 +648,242 @@ async function saveNewEmployee() {
     }
 }
 
+async function exportToPDF() {
+    try {
+        const exportBtn = document.getElementById('exportPdfBtn');
+        const originalText = exportBtn.textContent;
+        exportBtn.textContent = '⏳ Экспорт...';
+        exportBtn.disabled = true;
+        
+        const contacts = Object.values(contactsData);
+        
+        if (contacts.length === 0) {
+            alert('Нет контактов для экспорта');
+            exportBtn.textContent = originalText;
+            exportBtn.disabled = false;
+            return;
+        }
+        
+        // Создаем HTML таблицу для экспорта с правильной кодировкой
+        const pdfDiv = document.getElementById('pdfContent');
+        const currentDate = new Date().toLocaleString('ru-RU');
+        
+        let html = `
+            <!DOCTYPE html>
+            <html>
+            <head>
+                <meta charset="UTF-8">
+                <style>
+                    * {
+                        margin: 0;
+                        padding: 0;
+                        box-sizing: border-box;
+                    }
+                    body {
+                        font-family: 'Arial', 'Helvetica', sans-serif;
+                        padding: 20px;
+                        background: white;
+                    }
+                    h1 {
+                        color: #dc3545;
+                        text-align: center;
+                        font-size: 24px;
+                        margin-bottom: 10px;
+                    }
+                    .info {
+                        text-align: center;
+                        color: #666;
+                        margin-bottom: 20px;
+                        font-size: 12px;
+                    }
+                    table {
+                        width: 100%;
+                        border-collapse: collapse;
+                        margin-top: 20px;
+                        font-size: 10px;
+                    }
+                    th, td {
+                        border: 1px solid #ddd;
+                        padding: 8px;
+                        text-align: left;
+                        vertical-align: top;
+                    }
+                    th {
+                        background-color: #dc3545;
+                        color: white;
+                        font-weight: bold;
+                        font-size: 11px;
+                        text-align: center;
+                    }
+                    tr:nth-child(even) {
+                        background-color: #f9f9f9;
+                    }
+                    .footer {
+                        text-align: center;
+                        margin-top: 20px;
+                        color: #999;
+                        font-size: 10px;
+                    }
+                    .page-break {
+                        page-break-before: always;
+                    }
+                </style>
+            </head>
+            <body>
+                <h1>Phonambula - Список контактов</h1>
+                <div class="info">
+                    Дата генерации: ${currentDate}<br>
+                    Всего контактов: ${contacts.length}
+                </div>
+                <table>
+                    <thead>
+                        <tr>
+                            <th style="width: 5%">ID</th>
+                            <th style="width: 15%">ФИО</th>
+                            <th style="width: 12%">Мобильный</th>
+                            <th style="width: 12%">Городской</th>
+                            <th style="width: 10%">Внутренний</th>
+                            <th style="width: 12%">Должность</th>
+                            <th style="width: 12%">Отдел</th>
+                            <th style="width: 10%">Корпус</th>
+                            <th style="width: 7%">Кабинет</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+        `;
+        
+        contacts.forEach(contact => {
+            html += `
+                <tr>
+                    <td style="text-align: center">${contact.id || ''}</td>
+                    <td>${escapeHtml(contact.name || '—')}</td>
+                    <td>${escapeHtml(contact.mobilePhone || '—')}</td>
+                    <td>${escapeHtml(contact.landlinePhone || '—')}</td>
+                    <td style="text-align: center">${escapeHtml(contact.internalPhone || '—')}</td>
+                    <td>${escapeHtml(contact.position || '—')}</td>
+                    <td>${escapeHtml(contact.department || '—')}</td>
+                    <td>${escapeHtml(contact.building || '—')}</td>
+                    <td style="text-align: center">${escapeHtml(contact.cabinet || '—')}</td>
+                </tr>
+            `;
+        });
+        
+        html += `
+                    </tbody>
+                </table>
+                <div class="footer">
+                    * Сгенерировано автоматически в системе Phonambula
+                </div>
+            </body>
+            </html>
+        `;
+        
+        pdfDiv.innerHTML = html;
+        
+        // Ждем немного для рендеринга
+        await new Promise(resolve => setTimeout(resolve, 100));
+        
+        // Преобразуем HTML в изображение
+        const canvas = await html2canvas(pdfDiv, {
+            scale: 2,
+            logging: false,
+            useCORS: true,
+            backgroundColor: '#ffffff',
+            onclone: (clonedDoc, element) => {
+                // Дополнительная настройка стилей при клонировании
+                const style = clonedDoc.createElement('style');
+                style.textContent = `
+                    table {
+                        width: 100%;
+                        border-collapse: collapse;
+                    }
+                    th, td {
+                        border: 1px solid #ddd;
+                        padding: 8px;
+                    }
+                `;
+                clonedDoc.head.appendChild(style);
+            }
+        });
+        
+        const imgData = canvas.toDataURL('image/png');
+        const { jsPDF } = window.jspdf;
+        
+        // Создаем PDF с учетом размеров
+        const imgWidth = 280; // мм
+        const pageHeight = 297; // мм
+        const imgHeight = (canvas.height * imgWidth) / canvas.width;
+        
+        const doc = new jsPDF({
+            orientation: imgHeight > pageHeight ? 'portrait' : 'landscape',
+            unit: 'mm',
+            format: 'a4'
+        });
+        
+        // Если изображение не помещается на одну страницу, разбиваем
+        if (imgHeight > pageHeight - 20) {
+            let heightLeft = imgHeight;
+            let position = 0;
+            let page = 1;
+            
+            while (heightLeft > 0) {
+                if (page > 1) {
+                    doc.addPage();
+                }
+                
+                const pageCanvas = document.createElement('canvas');
+                pageCanvas.width = canvas.width;
+                pageCanvas.height = Math.min(canvas.height - position, (pageHeight - 20) * canvas.width / imgWidth);
+                
+                const ctx = pageCanvas.getContext('2d');
+                ctx.drawImage(
+                    canvas,
+                    0, position,
+                    canvas.width, pageCanvas.height,
+                    0, 0,
+                    pageCanvas.width, pageCanvas.height
+                );
+                
+                const pageImgData = pageCanvas.toDataURL('image/png');
+                doc.addImage(pageImgData, 'PNG', 10, 10, imgWidth, pageCanvas.height * imgWidth / canvas.width);
+                
+                position += pageCanvas.height;
+                heightLeft -= pageCanvas.height;
+                page++;
+            }
+        } else {
+            doc.addImage(imgData, 'PNG', 10, 10, imgWidth, imgHeight);
+        }
+        
+        // Сохраняем PDF
+        doc.save(`contacts_${new Date().toISOString().slice(0, 10)}.pdf`);
+        
+        // Очищаем временный div
+        pdfDiv.innerHTML = '';
+        
+        exportBtn.textContent = originalText;
+        exportBtn.disabled = false;
+        
+        alert(`✅ Экспорт завершен! Сохранено ${contacts.length} контактов`);
+        
+    } catch (error) {
+        console.error('Ошибка при экспорте PDF:', error);
+        alert('❌ Ошибка при экспорте PDF: ' + error.message);
+        
+        const exportBtn = document.getElementById('exportPdfBtn');
+        exportBtn.textContent = '📄 Экспорт в PDF';
+        exportBtn.disabled = false;
+    }
+}
+
+// Функция для экранирования HTML специальных символов
+function escapeHtml(text) {
+    if (!text) return '';
+    const div = document.createElement('div');
+    div.textContent = text;
+    return div.innerHTML;
+}
+
 window.addEventListener('DOMContentLoaded', async () => {
     if (!api.isAuthenticated()) {
         window.location.href = '/login.html';
