@@ -13,7 +13,6 @@ public class Division {
     @Column(name = "name_division", nullable = false, length = Integer.MAX_VALUE)
     private String nameDivision;
 
-    // Пустой конструктор (нужен для JPA)
     public Division() {
     }
 

@@ -2,6 +2,9 @@ let contactsData = {};
 let editedContactId = null;
 let currentUserRole = null;
 let searchTerm = '';
+let currentAuditPage = 1;
+let auditTotalPages = 1;
+let auditData = [];
 
 // Функция для экранирования HTML
 function escapeHtml(text) {
@@ -193,7 +196,7 @@ function rebuildContactTree() {
 
         grouped[letter].forEach(contact => {
             const deleteButton = isAdmin() 
-                ? `<button class="delete-btn" onclick="deleteContact(event,'${contact.id}')">Удалить</button>`
+                ? `<button class="delete-contact-btn" onclick="deleteContact(event,'${contact.id}')">Удалить</button>`
                 : '';
                 
             const displayName = searchTerm ? highlightText(contact.name || '—', searchTerm) : escapeHtml(contact.name || '—');
@@ -331,6 +334,12 @@ async function loadMyContacts() {
         const addEmployeeBtn = document.getElementById('addEmployeeBtn');
         if (addEmployeeBtn) {
             addEmployeeBtn.style.display = isAdmin() ? 'block' : 'none';
+        }
+
+        // Показываем или скрываем кнопку аудита
+        const auditBtn = document.getElementById('viewAuditBtn');
+        if (auditBtn) {
+            auditBtn.style.display = isAdmin() ? 'flex' : 'none';
         }
         
     } catch (err) {
@@ -1001,6 +1010,262 @@ async function saveContact() {
     }
 }
 
+// Открыть модальное окно аудита
+async function openAuditModal() {
+    if (!isAdmin()) {
+        showNotification('Доступ запрещен. Только для администраторов', 'error');
+        return;
+    }
+    
+    const modal = document.getElementById('auditModal');
+    if (modal) {
+        modal.style.display = 'flex';
+        currentAuditPage = 1;
+        await loadAuditLog();
+    }
+}
+
+// Закрыть модальное окно аудита
+function closeAuditModal() {
+    const modal = document.getElementById('auditModal');
+    if (modal) {
+        modal.style.display = 'none';
+    }
+}
+
+// Загрузить журнал аудита
+async function loadAuditLog() {
+    try {
+        const searchTerm = document.getElementById('auditSearch')?.value || '';
+        const operationFilter = document.getElementById('auditOperationFilter')?.value || '';
+        const tableFilter = document.getElementById('auditTableFilter')?.value || '';
+        
+        // Формируем URL с параметрами
+        let url = '/api/audit?page=' + currentAuditPage + '&size=20';
+        if (searchTerm) url += '&search=' + encodeURIComponent(searchTerm);
+        if (operationFilter) url += '&operation=' + operationFilter;
+        if (tableFilter) url += '&table=' + tableFilter;
+        
+        const response = await safeApiCall(() => api.get(url), 'Не удалось загрузить журнал аудита');
+        
+        auditData = response.content || [];
+        auditTotalPages = response.totalPages || 1;
+        
+        renderAuditTable();
+        updateAuditPagination();
+        
+    } catch (err) {
+        console.error('Ошибка загрузки аудита:', err);
+        const tbody = document.getElementById('auditTableBody');
+        if (tbody) {
+            tbody.innerHTML = '<tr><td colspan="6" style="text-align: center; color: #dc3545;">❌ Ошибка загрузки данных</td></tr>';
+        }
+    }
+}
+
+// Обновить журнал аудита
+function refreshAuditLog() {
+    currentAuditPage = 1;
+    loadAuditLog();
+}
+
+// Загрузить страницу аудита
+async function loadAuditPage(direction) {
+    if (direction === 'prev' && currentAuditPage > 1) {
+        currentAuditPage--;
+        await loadAuditLog();
+    } else if (direction === 'next' && currentAuditPage < auditTotalPages) {
+        currentAuditPage++;
+        await loadAuditLog();
+    }
+}
+
+// Обновить пагинацию
+function updateAuditPagination() {
+    const pageInfo = document.getElementById('auditPageInfo');
+    const prevBtn = document.getElementById('prevPageBtn');
+    const nextBtn = document.getElementById('nextPageBtn');
+    
+    if (pageInfo) {
+        pageInfo.textContent = `Страница ${currentAuditPage} из ${auditTotalPages}`;
+    }
+    if (prevBtn) {
+        prevBtn.disabled = currentAuditPage <= 1;
+    }
+    if (nextBtn) {
+        nextBtn.disabled = currentAuditPage >= auditTotalPages;
+    }
+}
+
+// Отобразить таблицу аудита
+function renderAuditTable() {
+    const tbody = document.getElementById('auditTableBody');
+    if (!tbody) return;
+    
+    if (!auditData || auditData.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="6" style="text-align: center;">📭 Нет записей аудита</td></tr>';
+        return;
+    }
+    
+    tbody.innerHTML = auditData.map(log => {
+        const operationClass = getOperationClass(log.operationType);
+        const operationIcon = getOperationIcon(log.operationType);
+        const userName = log.user ? `${log.user.surname || ''} ${log.user.name || ''}`.trim() || log.user.login || 'Система' : 'Система';
+        const changesHtml = renderChanges(log.itemBeforeChange, log.itemAfterChange, log.operationType);
+        
+        return `
+            <tr>
+                <td style="white-space: nowrap;">${formatDateTime(log.changeTime)}</td>
+                <td>${escapeHtml(userName)}</td>
+                <td class="${operationClass}">${operationIcon} ${log.operationType}</td>
+                <td>${escapeHtml(log.tableName)}</td>
+                <td>${log.recordId || '—'}</td>
+                <td>${changesHtml}</td>
+            </tr>
+        `;
+    }).join('');
+}
+
+// Получить класс для операции
+function getOperationClass(operation) {
+    switch(operation) {
+        case 'INSERT': return 'audit-operation-INSERT';
+        case 'UPDATE': return 'audit-operation-UPDATE';
+        case 'DELETE': return 'audit-operation-DELETE';
+        default: return '';
+    }
+}
+
+// Получить иконку для операции
+function getOperationIcon(operation) {
+    switch(operation) {
+        case 'INSERT': return '➕';
+        case 'UPDATE': return '✏️';
+        case 'DELETE': return '🗑️';
+        default: return '📝';
+    }
+}
+
+// Отобразить изменения в читаемом виде
+function renderChanges(before, after, operation) {
+    if (operation === 'INSERT' && after) {
+        return `<div class="json-view" onclick="showJsonDetails(this)">➕ Создано: ${formatJsonPreview(after)}</div>`;
+    } else if (operation === 'DELETE' && before) {
+        return `<div class="json-view" onclick="showJsonDetails(this)">🗑️ Удалено: ${formatJsonPreview(before)}</div>`;
+    } else if (operation === 'UPDATE' && before && after) {
+        const changes = getChanges(before, after);
+        return `<div class="json-view" onclick="showJsonDetails(this)">✏️ Изменено: ${changes}</div>`;
+    }
+    return '<span style="color: #999;">—</span>';
+}
+
+// Форматировать предпросмотр JSON
+function formatJsonPreview(jsonStr) {
+    if (!jsonStr) return '—';
+    try {
+        const obj = typeof jsonStr === 'string' ? JSON.parse(jsonStr) : jsonStr;
+        const keys = Object.keys(obj).slice(0, 3);
+        const preview = keys.map(k => `${k}: ${obj[k]}`).join(', ');
+        return preview + (Object.keys(obj).length > 3 ? '...' : '');
+    } catch (e) {
+        return String(jsonStr).substring(0, 50);
+    }
+}
+
+// Получить изменения между двумя объектами
+function getChanges(before, after) {
+    try {
+        const beforeObj = typeof before === 'string' ? JSON.parse(before) : before;
+        const afterObj = typeof after === 'string' ? JSON.parse(after) : after;
+        
+        const changes = [];
+        for (const key in afterObj) {
+            if (beforeObj[key] !== afterObj[key]) {
+                changes.push(`${key}: ${beforeObj[key]} → ${afterObj[key]}`);
+            }
+        }
+        return changes.slice(0, 3).join(', ') + (changes.length > 3 ? '...' : '');
+    } catch (e) {
+        return 'Изменения';
+    }
+}
+
+// Показать полный JSON в диалоге
+function showJsonDetails(element) {
+    const jsonText = element.textContent;
+    const jsonMatch = jsonText.match(/(?:Создано|Удалено|Изменено):\s*(.+)/);
+    if (jsonMatch && jsonMatch[1]) {
+        alert('Подробные данные:\n' + jsonMatch[1]);
+    }
+}
+
+// Форматировать дату и время
+function formatDateTime(dateTimeStr) {
+    if (!dateTimeStr) return '—';
+    try {
+        const date = new Date(dateTimeStr);
+        return date.toLocaleString('ru-RU', {
+            day: '2-digit',
+            month: '2-digit',
+            year: 'numeric',
+            hour: '2-digit',
+            minute: '2-digit',
+            second: '2-digit'
+        });
+    } catch (e) {
+        return dateTimeStr;
+    }
+}
+
+// Добавить обработчики для фильтров аудита
+function initAuditFilters() {
+    const searchInput = document.getElementById('auditSearch');
+    const operationFilter = document.getElementById('auditOperationFilter');
+    const tableFilter = document.getElementById('auditTableFilter');
+    
+    if (searchInput) {
+        searchInput.addEventListener('input', debounce(() => {
+            currentAuditPage = 1;
+            loadAuditLog();
+        }, 500));
+    }
+    
+    if (operationFilter) {
+        operationFilter.addEventListener('change', () => {
+            currentAuditPage = 1;
+            loadAuditLog();
+        });
+    }
+    
+    if (tableFilter) {
+        tableFilter.addEventListener('change', () => {
+            currentAuditPage = 1;
+            loadAuditLog();
+        });
+    }
+}
+
+// Дебаунс функция
+function debounce(func, wait) {
+    let timeout;
+    return function executedFunction(...args) {
+        const later = () => {
+            clearTimeout(timeout);
+            func(...args);
+        };
+        clearTimeout(timeout);
+        timeout = setTimeout(later, wait);
+    };
+}
+
+// Показать/скрыть кнопку аудита для админа
+function toggleAuditButton() {
+    const auditBtn = document.getElementById('viewAuditBtn');
+    if (auditBtn) {
+        auditBtn.style.display = isAdmin() ? 'flex' : 'none';
+    }
+}
+
 // Экспортируем функции в глобальную область видимости
 window.deleteContact = deleteContact;
 window.openAddEmployeeModal = openAddEmployeeModal;
@@ -1014,6 +1279,12 @@ window.editReference = editReference;
 window.saveReference = saveReference;
 window.closeReferenceModal = closeReferenceModal;
 window.saveContact = saveContact;
+// Добавьте в конец файла home.js
+window.openAuditModal = openAuditModal;
+window.closeAuditModal = closeAuditModal;
+window.refreshAuditLog = refreshAuditLog;
+window.loadAuditPage = loadAuditPage;
+window.showJsonDetails = showJsonDetails;
 
 window.addEventListener('DOMContentLoaded', async () => {
     if (!api.isAuthenticated()) {
@@ -1046,6 +1317,19 @@ window.addEventListener('DOMContentLoaded', async () => {
     
     if (clearBtn) {
         clearBtn.addEventListener('click', clearSearch);
+    }
+
+    // Инициализация аудита
+    initAuditFilters();
+    
+    // Закрытие модального окна по клику вне его
+    const modal = document.getElementById('auditModal');
+    if (modal) {
+        modal.addEventListener('click', (e) => {
+            if (e.target === modal) {
+                closeAuditModal();
+            }
+        });
     }
     
     loadMyContacts();

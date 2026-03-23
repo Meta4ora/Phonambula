@@ -15,15 +15,16 @@
                 <h3>Контакты</h3>
             </div>
             
-            <!-- Добавляем поле поиска -->
+            <!-- Поле поиска -->
             <div class="search-container">
-                <input type="text" id="searchInput" class="search-input" placeholder="🔍 Поиск по имени, телефону, должности...">
-                <button id="clearSearchBtn" class="clear-search-btn" style="display: none;">✕</button>
+                <input type="text" id="searchInput" class="search-input" placeholder="🔍 Поиск по имени, телефону, должности..." autocomplete="off">
+                <button id="clearSearchBtn" class="clear-search-btn" style="display: none;" >✕</button>
             </div>
             
             <button onclick="openAddEmployeeModal()" id="addEmployeeBtn" class="add-employee-btn">
-                Добавить сотрудника
+                ➕ Добавить сотрудника
             </button>
+            
             <ul class="contact-tree">
                 <!-- Динамическое содержимое -->
             </ul>
@@ -32,8 +33,12 @@
         <div class="contact-details" id="contactDetails"></div>
     </div>
 
+    <!-- Кнопки управления -->
     <button id="exportPdfBtn" class="export-pdf-btn" onclick="exportToPDF()">
         📄 Экспорт в PDF
+    </button>
+    <button id="viewAuditBtn" class="audit-btn" onclick="openAuditModal()" style="display: none;">
+        📋 Журнал аудита
     </button>
 
     <!-- Модальное окно для добавления сотрудника -->
@@ -120,8 +125,44 @@
         </div>
     </div>
 
+    <!-- Модальное окно для просмотра аудита (упрощенная версия) -->
+    <div id="auditModal" class="modal" style="display: none;">
+        <div class="modal-content audit-modal">
+            <div class="audit-header">
+                <h3>📋 Журнал аудита</h3>
+                <button onclick="closeAuditModal()" class="close-btn">&times;</button>
+            </div>
+            
+            <div class="audit-table-container">
+                <table class="audit-table">
+                    <thead>
+                        <tr>
+                            <th>📅 Дата и время</th>
+                            <th>👤 Пользователь</th>
+                            <th>📝 Операция</th>
+                            <th>📊 Таблица</th>
+                            <th>🔢 ID записи</th>
+                            <th>📄 Изменения</th>
+                        </tr>
+                    </thead>
+                    <tbody id="auditTableBody">
+                        <tr>
+                            <td colspan="6" style="text-align: center;">⏳ Загрузка...</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+            
+            <div class="audit-pagination">
+                <button onclick="loadAuditPage('prev')" id="prevPageBtn" disabled>◀ Предыдущая</button>
+                <span id="auditPageInfo">Страница 1</span>
+                <button onclick="loadAuditPage('next')" id="nextPageBtn">Следующая ▶</button>
+            </div>
+        </div>
+    </div>
+
     <!-- Скрытый div для генерации PDF -->
-<div id="pdfContent" style="position: absolute; left: -9999px; top: -9999px; width: 1200px; padding: 20px; background: white; font-family: Arial, sans-serif;"></div>
+    <div id="pdfContent" style="position: absolute; left: -9999px; top: -9999px; width: 1200px; padding: 20px; background: white; font-family: Arial, sans-serif;"></div>
 
     <script src="js/api.js"></script>
     <script src="js/home.js"></script>

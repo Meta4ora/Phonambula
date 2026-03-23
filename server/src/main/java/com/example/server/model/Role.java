@@ -13,7 +13,6 @@ public class Role {
     @Column(name = "name_role", nullable = false, length = Integer.MAX_VALUE)
     private String nameRole;
 
-    // Пустой конструктор (нужен для JPA)
     public Role() {
     }
 
@@ -22,7 +21,6 @@ public class Role {
         this.nameRole = nameRole;
     }
 
-    // Геттеры и сеттеры
     public Integer getId() {
         return id;
     }

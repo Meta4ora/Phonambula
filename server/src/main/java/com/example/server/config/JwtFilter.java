@@ -30,7 +30,6 @@ public class JwtFilter extends OncePerRequestFilter {
         String path = request.getServletPath();
         String method = request.getMethod();
         
-        // Пропускаем OPTIONS запросы
         if ("OPTIONS".equalsIgnoreCase(method)) {
             return true;
         }

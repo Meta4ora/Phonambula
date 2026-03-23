@@ -16,7 +16,6 @@ public class Building {
     @Column(name = "address", nullable = false, length = Integer.MAX_VALUE)
     private String address;
 
-    // Пустой конструктор (нужен для JPA)
     public Building() {
     }
 
