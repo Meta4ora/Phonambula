@@ -349,57 +349,27 @@ jobs:
           if [ -n "$TEST_USER_ID" ]; then
             echo "=== Deleting test user ID: $TEST_USER_ID ==="
             
-            # 1. Ищем абонента, связанного с тестовым пользователем, по правильному эндпоинту
-            echo "Looking for subscriber linked to user $TEST_USER_ID..."
+            # Сначала удаляем абонента, связанного с пользователем (если есть)
             SUBSCRIBERS=$(curl -s -H "Authorization: Bearer $JWT_TOKEN" \
-              http://localhost:$HOST_PORT/api/subscribers/user/$TEST_USER_ID)
+              http://localhost:$HOST_PORT/api/subscribers/my)
+            SUBSCRIBER_ID=$(echo $SUBSCRIBERS | jq -r ".[] | select(.userId == $TEST_USER_ID) | .id")
             
-            echo "Subscribers response: $SUBSCRIBERS"
-            
-            # Извлекаем ID абонента
-            SUBSCRIBER_ID=$(echo $SUBSCRIBERS | jq -r '.[0].id // empty')
-            
-            if [ -n "$SUBSCRIBER_ID" ] && [ "$SUBSCRIBER_ID" != "null" ] && [ "$SUBSCRIBER_ID" != "" ]; then
-              echo "Found subscriber ID: $SUBSCRIBER_ID"
-              echo "Deleting subscriber ID: $SUBSCRIBER_ID"
-              DELETE_SUB_RESPONSE=$(curl -s -w "\n%{http_code}" -X DELETE \
+            if [ -n "$SUBSCRIBER_ID" ] && [ "$SUBSCRIBER_ID" != "null" ]; then
+              echo "Deleting associated subscriber ID: $SUBSCRIBER_ID"
+              curl -s -X DELETE \
                 http://localhost:$HOST_PORT/api/subscribers/$SUBSCRIBER_ID \
-                -H "Authorization: Bearer $JWT_TOKEN")
-              DELETE_SUB_CODE=$(echo "$DELETE_SUB_RESPONSE" | tail -n1)
-              
-              if [ "$DELETE_SUB_CODE" -eq 200 ] || [ "$DELETE_SUB_CODE" -eq 204 ]; then
-                echo "✅ Subscriber deleted successfully"
-              else
-                echo "⚠️ Failed to delete subscriber (HTTP $DELETE_SUB_CODE)"
-                echo "Response: $(echo "$DELETE_SUB_RESPONSE" | sed '$d')"
-              fi
-            else
-              echo "No subscriber found for user $TEST_USER_ID"
+                -H "Authorization: Bearer $JWT_TOKEN"
             fi
             
-            # 2. Удаляем пользователя
-            echo "Deleting user ID: $TEST_USER_ID"
-            DELETE_USER_RESPONSE=$(curl -s -w "\n%{http_code}" -X DELETE \
+            # Удаляем пользователя
+            HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" -X DELETE \
               http://localhost:$HOST_PORT/api/users/$TEST_USER_ID \
               -H "Authorization: Bearer $JWT_TOKEN")
-            DELETE_USER_CODE=$(echo "$DELETE_USER_RESPONSE" | tail -n1)
             
-            if [ "$DELETE_USER_CODE" -eq 200 ] || [ "$DELETE_USER_CODE" -eq 204 ]; then
-              echo "✅ Test user deleted successfully"
+            if [ "$HTTP_CODE" -eq 200 ] || [ "$HTTP_CODE" -eq 204 ]; then
+              echo "Test user deleted successfully"
             else
-              echo "❌ Failed to delete test user (HTTP $DELETE_USER_CODE)"
-              echo "Response: $(echo "$DELETE_USER_RESPONSE" | sed '$d')"
-            fi
-            
-            # 3. Проверяем, что пользователь действительно удален
-            CHECK_USER=$(curl -s -o /dev/null -w "%{http_code}" \
-              -H "Authorization: Bearer $JWT_TOKEN" \
-              http://localhost:$HOST_PORT/api/users/$TEST_USER_ID)
-            
-            if [ "$CHECK_USER" -eq 404 ]; then
-              echo "✅ Verification: User $TEST_USER_ID is gone"
-            else
-              echo "⚠️ Warning: User $TEST_USER_ID still exists (HTTP $CHECK_USER)"
+              echo "Failed to delete test user (HTTP $HTTP_CODE)"
             fi
           else
             echo "No test user to delete"
