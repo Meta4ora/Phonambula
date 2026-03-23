@@ -196,7 +196,7 @@ function rebuildContactTree() {
 
         grouped[letter].forEach(contact => {
             const deleteButton = isAdmin() 
-                ? `<button class="delete-btn" onclick="deleteContact(event,'${contact.id}')">Удалить</button>`
+                ? `<button class="delete-contact-btn" onclick="deleteContact(event,'${contact.id}')">Удалить</button>`
                 : '';
                 
             const displayName = searchTerm ? highlightText(contact.name || '—', searchTerm) : escapeHtml(contact.name || '—');
