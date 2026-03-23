@@ -43,7 +43,7 @@ jobs:
           echo "HOST_PORT=$HOST_PORT" >> $GITHUB_ENV
           docker run -d --name phonambula-backend -p $HOST_PORT:8080 phonambula-backend:latest
           echo "Backend running on port $HOST_PORT"
-          sleep 25
+          sleep 30
 
       # 6 Установка jq
       - name: Install jq
@@ -53,14 +53,14 @@ jobs:
       - name: Wait for backend
         run: |
           echo "Waiting for backend to start..."
-          for i in {1..15}; do
+          for i in {1..20}; do
             if curl -s http://localhost:$HOST_PORT/actuator/health > /dev/null 2>&1; then
               echo "Backend is ready!"
               break
             fi
             echo "Waiting for backend... attempt $i"
             sleep 3
-            if [ $i -eq 15 ]; then
+            if [ $i -eq 20 ]; then
               echo "Backend failed to start"
               docker logs phonambula-backend --tail 50
               exit 1
@@ -192,48 +192,20 @@ jobs:
           fi
           echo "GET /api/users/me - OK, role: $ROLE"
 
-      # 16 Получаем существующие ID справочников
-      - name: Get reference IDs
+      # 16 Тестируем создание нового пользователя (БЕЗ создания абонента)
+      - name: Test POST /auth/register (create user without subscriber)
         run: |
-          echo "=== Getting reference IDs ==="
-          
-          # Получаем первую должность
-          POSTS=$(curl -s -H "Authorization: Bearer $JWT_TOKEN" \
-            http://localhost:$HOST_PORT/api/posts)
-          echo "Posts response: $POSTS"
-          POST_ID=$(echo $POSTS | jq -r '.[0].id // 1')
-          echo "POST_ID=$POST_ID" >> $GITHUB_ENV
-          
-          # Получаем первый отдел
-          DIVISIONS=$(curl -s -H "Authorization: Bearer $JWT_TOKEN" \
-            http://localhost:$HOST_PORT/api/divisions)
-          echo "Divisions response: $DIVISIONS"
-          DIVISION_ID=$(echo $DIVISIONS | jq -r '.[0].id // 1')
-          echo "DIVISION_ID=$DIVISION_ID" >> $GITHUB_ENV
-          
-          # Получаем первый корпус
-          BUILDINGS=$(curl -s -H "Authorization: Bearer $JWT_TOKEN" \
-            http://localhost:$HOST_PORT/api/buildings)
-          echo "Buildings response: $BUILDINGS"
-          BUILDING_ID=$(echo $BUILDINGS | jq -r '.[0].id // 1')
-          echo "BUILDING_ID=$BUILDING_ID" >> $GITHUB_ENV
-
-      # 17 Тестируем создание нового пользователя
-      - name: Test POST /auth/register (create user)
-        run: |
-          echo "=== Creating test user ==="
+          echo "=== Creating test user (without subscriber) ==="
           RANDOM_LOGIN="testuser_$(date +%s)_$RANDOM"
           
+          # Регистрируем ТОЛЬКО пользователя, без абонента
           REGISTER_DATA="{
             \"surname\": \"Testov\",
             \"name\": \"Test\",
             \"patronymic\": \"Testovich\",
             \"login\": \"$RANDOM_LOGIN\",
             \"password\": \"test123\",
-            \"roleId\": 2,
-            \"postId\": $POST_ID,
-            \"divisionId\": $DIVISION_ID,
-            \"buildingId\": $BUILDING_ID
+            \"roleId\": 2
           }"
           
           echo "Sending registration request..."
@@ -270,7 +242,7 @@ jobs:
           echo "TEST_USER_ID=$USER_ID" >> $GITHUB_ENV
           echo "TEST_USER_TOKEN=$USER_TOKEN" >> $GITHUB_ENV
 
-      # 18 Тестируем вход созданного пользователя
+      # 17 Тестируем вход созданного пользователя
       - name: Test POST /auth/login (new user)
         run: |
           if [ -n "$TEST_USER_LOGIN" ]; then
@@ -291,7 +263,7 @@ jobs:
             echo "No test user created, skipping login test"
           fi
 
-      # 19 Тестируем попытку входа с неверным паролем
+      # 18 Тестируем попытку входа с неверным паролем
       - name: Test POST /auth/login (wrong password - should fail)
         run: |
           echo "=== Testing wrong password ==="
@@ -308,7 +280,7 @@ jobs:
           fi
           echo "Wrong password correctly rejected with $HTTP_CODE"
 
-      # 20 Тестируем авторизацию без токена (должна быть ошибка)
+      # 19 Тестируем авторизацию без токена (должна быть ошибка)
       - name: Test unauthorized access
         run: |
           HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" \
@@ -320,7 +292,7 @@ jobs:
           fi
           echo "Unauthorized access correctly blocked"
 
-      # 21 Тестируем регистрацию с дублирующимся логином (должна быть ошибка)
+      # 20 Тестируем регистрацию с дублирующимся логином (должна быть ошибка)
       - name: Test POST /auth/register (duplicate login - should fail)
         run: |
           if [ -n "$TEST_USER_LOGIN" ]; then
@@ -342,33 +314,39 @@ jobs:
             echo "Duplicate registration correctly failed with $HTTP_CODE"
           fi
 
-      # 22 Удаление тестового пользователя (очистка через SQL)
-      - name: Cleanup - Delete test user
+      # 21 Удаление тестового пользователя и всех связанных данных
+      - name: Cleanup - Delete test user and all related data
         if: always()
         run: |
           if [ -n "$TEST_USER_ID" ]; then
-            echo "=== Deleting test user ID: $TEST_USER_ID ==="
+            echo "=== Cleaning up test user ID: $TEST_USER_ID ==="
             
             # Получаем имя контейнера PostgreSQL
             DB_CONTAINER=$(docker ps -q -f name=phonambula-db)
             
             if [ -z "$DB_CONTAINER" ]; then
-              # Если контейнер БД не найден, ищем по имени
               DB_CONTAINER=$(docker ps -q -f name=db)
             fi
             
             if [ -n "$DB_CONTAINER" ]; then
               echo "Found DB container: $DB_CONTAINER"
               
-              # Удаляем абонента
+              # 1. Удаляем записи из audit_log (если есть)
+              echo "Deleting audit_log entries for user $TEST_USER_ID..."
+              docker exec $DB_CONTAINER psql -U postgres -d phonambula -c \
+                "DELETE FROM audit_log WHERE id_user = $TEST_USER_ID;" 2>/dev/null || true
+              
+              # 2. Удаляем абонента (subscriber)
+              echo "Deleting subscriber for user $TEST_USER_ID..."
               docker exec $DB_CONTAINER psql -U postgres -d phonambula -c \
                 "DELETE FROM subscribers WHERE id_user = $TEST_USER_ID;" 2>/dev/null || true
               
-              # Удаляем пользователя
+              # 3. Удаляем пользователя
+              echo "Deleting user $TEST_USER_ID..."
               docker exec $DB_CONTAINER psql -U postgres -d phonambula -c \
                 "DELETE FROM users WHERE id_user = $TEST_USER_ID;" 2>/dev/null || true
               
-              echo "✅ Test user deleted via SQL"
+              echo "✅ Cleanup completed"
               
               # Проверяем, что пользователь удален
               CHECK_USER=$(docker exec $DB_CONTAINER psql -U postgres -d phonambula -t -c \
@@ -386,7 +364,7 @@ jobs:
             echo "No test user to delete"
           fi
 
-      # 23 Финальная проверка
+      # 22 Финальная проверка
       - name: Final health check
         run: |
           echo "=== FINAL TEST SUMMARY ==="
@@ -398,7 +376,7 @@ jobs:
             echo "Warning: Backend container stopped"
           fi
 
-      # 24 Останавливаем контейнер после тестов
+      # 23 Останавливаем контейнер после тестов
       - name: Stop backend container
         if: always()
         run: |
