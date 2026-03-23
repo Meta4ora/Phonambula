@@ -13,7 +13,6 @@ public class Post {
     @Column(name = "name_post", nullable = false, length = Integer.MAX_VALUE)
     private String namePost;
 
-    // Пустой конструктор (нужен для JPA)
     public Post() {
     }
 

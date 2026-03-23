@@ -26,7 +26,6 @@ public class UserController {
         this.userService = userService;
     }
 
-    // ДОБАВЬТЕ ЭТОТ МЕТОД
     @GetMapping("/me")
     public ResponseEntity<?> getCurrentUser() {
         try {
@@ -51,7 +50,6 @@ public class UserController {
         }
     }
 
-    // Остальные методы остаются без изменений
     @GetMapping
     public ResponseEntity<List<User>> getAllUsers() {
         List<User> users = userService.findAll();

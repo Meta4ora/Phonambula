@@ -28,7 +28,7 @@ public class AuthController {
         this.jwtService = jwtService;
     }
 
-    // ================= LOGIN =================
+    // LOGIN
 
     @PostMapping("/login")
     public ResponseEntity<?> login(@RequestBody AuthRequest request) {
@@ -49,7 +49,7 @@ public class AuthController {
         ));
     }
 
-    // ================= REGISTER =================
+    // REGISTER
 
     @PostMapping("/register")
     @Transactional
@@ -61,7 +61,6 @@ public class AuthController {
         System.out.println("Internal phone: " + request.getInternalPhoneNumber());
         System.out.println("Cabinet: " + request.getCabinetNumber());
 
-        // 1️⃣ создаём пользователя
         User user = userService.createUser(
                 request.getSurname() != null ? request.getSurname() : "",
                 request.getName() != null ? request.getName() : "",
@@ -71,7 +70,6 @@ public class AuthController {
                 request.getRoleId()
         );
 
-        // 2️⃣ создаём subscriber со всеми полями
         subscriberService.createSubscriber(
                 user.getId(),
                 request.getPostId(),
@@ -84,7 +82,6 @@ public class AuthController {
                 request.getMobilePhoneNumber() != null ? request.getMobilePhoneNumber() : ""
         );
 
-        // 3️⃣ выдаём JWT сразу после регистрации
         String token = jwtService.generateToken(user.getLogin());
 
         return ResponseEntity.ok(Map.of(
@@ -94,7 +91,7 @@ public class AuthController {
         ));
     }
 
-    // ================= DTO =================
+    // DTO 
 
     @Data
     static class AuthRequest {
@@ -115,7 +112,6 @@ public class AuthController {
         private Integer divisionId;
         private Integer buildingId;
         
-        // Добавляем поля для телефонов и кабинета
         private String mobilePhoneNumber;
         private String landlinePhoneNumber;
         private String internalPhoneNumber;

@@ -47,7 +47,7 @@ public class SubscriberController {
         User currentUser = userService.findByLogin(login)
                 .orElseThrow(() -> new RuntimeException("Пользователь не найден"));
 
-        // Используем findAll(), fetch с join можно настроить в сервисе при необходимости
+        // Используем findAll()
         List<Subscriber> subscribers = subscriberService.findAll();
 
         List<Map<String, Object>> result = subscribers.stream()
