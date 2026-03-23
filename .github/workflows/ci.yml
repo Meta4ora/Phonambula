@@ -367,9 +367,9 @@ jobs:
               -H "Authorization: Bearer $JWT_TOKEN")
             
             if [ "$HTTP_CODE" -eq 200 ] || [ "$HTTP_CODE" -eq 204 ]; then
-              echo "✅ Test user deleted successfully"
+              echo "Test user deleted successfully"
             else
-              echo "⚠️ Failed to delete test user (HTTP $HTTP_CODE)"
+              echo "Failed to delete test user (HTTP $HTTP_CODE)"
             fi
           else
             echo "No test user to delete"
