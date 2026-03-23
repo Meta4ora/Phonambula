@@ -33,15 +33,13 @@
         <div class="contact-details" id="contactDetails"></div>
     </div>
 
-    <!-- Кнопки управления (фиксированные в правом нижнем углу) -->
-    <div class="floating-buttons">
-        <button id="viewAuditBtn" class="floating-btn audit-btn" onclick="openAuditModal()" style="display: none;">
-            📋 Журнал аудита
-        </button>
-        <button id="exportPdfBtn" class="floating-btn export-btn" onclick="exportToPDF()">
-            📄 Экспорт в PDF
-        </button>
-    </div>
+    <!-- Кнопки управления -->
+    <button id="exportPdfBtn" class="export-pdf-btn" onclick="exportToPDF()">
+        📄 Экспорт в PDF
+    </button>
+    <button id="viewAuditBtn" class="audit-btn" onclick="openAuditModal()" style="display: none;">
+        📋 Журнал аудита
+    </button>
 
     <!-- Модальное окно для добавления сотрудника -->
     <div id="addEmployeeModal" class="modal" style="display: none;">
@@ -127,28 +125,12 @@
         </div>
     </div>
 
-    <!-- Модальное окно для просмотра аудита -->
+    <!-- Модальное окно для просмотра аудита (упрощенная версия) -->
     <div id="auditModal" class="modal" style="display: none;">
         <div class="modal-content audit-modal">
             <div class="audit-header">
                 <h3>📋 Журнал аудита</h3>
                 <button onclick="closeAuditModal()" class="close-btn">&times;</button>
-            </div>
-            
-            <div class="audit-filters">
-                <input type="text" id="auditSearch" class="audit-search" placeholder="🔍 Поиск по таблице, операции, пользователю...">
-                <select id="auditOperationFilter" class="audit-filter-select">
-                    <option value="">Все операции</option>
-                    <option value="INSERT">➕ Создание</option>
-                    <option value="UPDATE">✏️ Изменение</option>
-                    <option value="DELETE">🗑️ Удаление</option>
-                </select>
-                <select id="auditTableFilter" class="audit-filter-select">
-                    <option value="">Все таблицы</option>
-                    <option value="users">👤 Пользователи</option>
-                    <option value="subscribers">📞 Абоненты</option>
-                </select>
-                <button onclick="refreshAuditLog()" class="audit-refresh-btn">🔄 Обновить</button>
             </div>
             
             <div class="audit-table-container">
