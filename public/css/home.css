@@ -300,7 +300,28 @@ body {
     transform: translateY(-2px);
     box-shadow: 0 8px 20px rgba(77, 63, 141, 0.4);
 }
+.delete-contact-btn {
+    background-color: #ff4444;
+    color: white;
+    border: none;
+    padding: 8px 16px;
+    border-radius: 14px;
+    cursor: pointer;
+    font-size: 14px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    transition: all 0.3s;
+}
 
+.delete-contact-btn:hover {
+    background-color: #cc0000;
+}
+
+/* Убираем старые стили для delete-btn в списке */
+.delete-btn {
+    display: none;
+}
 /* ====================== КНОПКА СОХРАНЕНИЯ ====================== */
 .save-button-container {
     text-align: center;
