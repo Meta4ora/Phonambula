@@ -342,64 +342,45 @@ jobs:
             echo "Duplicate registration correctly failed with $HTTP_CODE"
           fi
 
-      # 22 Удаление тестового пользователя (очистка)
+      # 22 Удаление тестового пользователя (очистка через SQL)
       - name: Cleanup - Delete test user
         if: always()
         run: |
           if [ -n "$TEST_USER_ID" ]; then
             echo "=== Deleting test user ID: $TEST_USER_ID ==="
             
-            # 1. Ищем абонента, связанного с тестовым пользователем, по правильному эндпоинту
-            echo "Looking for subscriber linked to user $TEST_USER_ID..."
-            SUBSCRIBERS=$(curl -s -H "Authorization: Bearer $JWT_TOKEN" \
-              http://localhost:$HOST_PORT/api/subscribers/user/$TEST_USER_ID)
+            # Получаем имя контейнера PostgreSQL
+            DB_CONTAINER=$(docker ps -q -f name=phonambula-db)
             
-            echo "Subscribers response: $SUBSCRIBERS"
+            if [ -z "$DB_CONTAINER" ]; then
+              # Если контейнер БД не найден, ищем по имени
+              DB_CONTAINER=$(docker ps -q -f name=db)
+            fi
             
-            # Извлекаем ID абонента
-            SUBSCRIBER_ID=$(echo $SUBSCRIBERS | jq -r '.[0].id // empty')
-            
-            if [ -n "$SUBSCRIBER_ID" ] && [ "$SUBSCRIBER_ID" != "null" ] && [ "$SUBSCRIBER_ID" != "" ]; then
-              echo "Found subscriber ID: $SUBSCRIBER_ID"
-              echo "Deleting subscriber ID: $SUBSCRIBER_ID"
-              DELETE_SUB_RESPONSE=$(curl -s -w "\n%{http_code}" -X DELETE \
-                http://localhost:$HOST_PORT/api/subscribers/$SUBSCRIBER_ID \
-                -H "Authorization: Bearer $JWT_TOKEN")
-              DELETE_SUB_CODE=$(echo "$DELETE_SUB_RESPONSE" | tail -n1)
+            if [ -n "$DB_CONTAINER" ]; then
+              echo "Found DB container: $DB_CONTAINER"
               
-              if [ "$DELETE_SUB_CODE" -eq 200 ] || [ "$DELETE_SUB_CODE" -eq 204 ]; then
-                echo "✅ Subscriber deleted successfully"
+              # Удаляем абонента
+              docker exec $DB_CONTAINER psql -U postgres -d phonambula -c \
+                "DELETE FROM subscribers WHERE id_user = $TEST_USER_ID;" 2>/dev/null || true
+              
+              # Удаляем пользователя
+              docker exec $DB_CONTAINER psql -U postgres -d phonambula -c \
+                "DELETE FROM users WHERE id_user = $TEST_USER_ID;" 2>/dev/null || true
+              
+              echo "✅ Test user deleted via SQL"
+              
+              # Проверяем, что пользователь удален
+              CHECK_USER=$(docker exec $DB_CONTAINER psql -U postgres -d phonambula -t -c \
+                "SELECT COUNT(*) FROM users WHERE id_user = $TEST_USER_ID;" 2>/dev/null | tr -d ' ')
+              
+              if [ "$CHECK_USER" -eq 0 ]; then
+                echo "✅ Verification: User $TEST_USER_ID is gone"
               else
-                echo "⚠️ Failed to delete subscriber (HTTP $DELETE_SUB_CODE)"
-                echo "Response: $(echo "$DELETE_SUB_RESPONSE" | sed '$d')"
+                echo "⚠️ Warning: User $TEST_USER_ID still exists"
               fi
             else
-              echo "No subscriber found for user $TEST_USER_ID"
-            fi
-            
-            # 2. Удаляем пользователя
-            echo "Deleting user ID: $TEST_USER_ID"
-            DELETE_USER_RESPONSE=$(curl -s -w "\n%{http_code}" -X DELETE \
-              http://localhost:$HOST_PORT/api/users/$TEST_USER_ID \
-              -H "Authorization: Bearer $JWT_TOKEN")
-            DELETE_USER_CODE=$(echo "$DELETE_USER_RESPONSE" | tail -n1)
-            
-            if [ "$DELETE_USER_CODE" -eq 200 ] || [ "$DELETE_USER_CODE" -eq 204 ]; then
-              echo "✅ Test user deleted successfully"
-            else
-              echo "❌ Failed to delete test user (HTTP $DELETE_USER_CODE)"
-              echo "Response: $(echo "$DELETE_USER_RESPONSE" | sed '$d')"
-            fi
-            
-            # 3. Проверяем, что пользователь действительно удален
-            CHECK_USER=$(curl -s -o /dev/null -w "%{http_code}" \
-              -H "Authorization: Bearer $JWT_TOKEN" \
-              http://localhost:$HOST_PORT/api/users/$TEST_USER_ID)
-            
-            if [ "$CHECK_USER" -eq 404 ]; then
-              echo "✅ Verification: User $TEST_USER_ID is gone"
-            else
-              echo "⚠️ Warning: User $TEST_USER_ID still exists (HTTP $CHECK_USER)"
+              echo "⚠️ Could not find database container"
             fi
           else
             echo "No test user to delete"
