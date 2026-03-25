@@ -6,6 +6,9 @@ import com.example.server.repository.AuditLogRepository;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageImpl;
+import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -13,6 +16,7 @@ import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.stream.Collectors;
 
 @Service
 @Transactional(readOnly = true)
@@ -26,70 +30,39 @@ public class AuditLogService {
         this.auditLogRepository = auditLogRepository;
     }
 
-    public List<AuditLog> findAll() {
-        return auditLogRepository.findAllWithUser();
+    public Page<AuditLog> findAll(Pageable pageable) {
+        return auditLogRepository.findAllWithUser(pageable);
     }
 
     public Optional<AuditLog> findById(Long id) {
         return auditLogRepository.findById(id);
     }
 
-    public List<AuditLog> findByUserId(Long userId) {
-        return auditLogRepository.findByUserId(userId);
+    public Page<AuditLog> findByUserId(Long userId, Pageable pageable) {
+        return auditLogRepository.findByUserId(userId, pageable);
     }
 
-    public List<AuditLog> findByTableName(String tableName) {
-        return auditLogRepository.findByTableNameWithUser(tableName);
+    public Page<AuditLog> findByTableName(String tableName, Pageable pageable) {
+        return auditLogRepository.findByTableName(tableName, pageable);
     }
 
-    public List<AuditLog> findByOperationType(String operationType) {
-        return auditLogRepository.findByOperationType(operationType);
+    public Page<AuditLog> findByOperationType(String operationType, Pageable pageable) {
+        return auditLogRepository.findByOperationType(operationType, pageable);
     }
 
-    public List<AuditLog> findByDateRange(LocalDateTime start, LocalDateTime end) {
-        return auditLogRepository.findByChangeTimeBetween(start, end);
+    public Page<AuditLog> findByOperationAndTable(String operation, String table, Pageable pageable) {
+        return auditLogRepository.findByOperationTypeAndTableName(operation, table, pageable);
     }
 
-    public List<AuditLog> findByUserAndDateRange(Long userId, LocalDateTime start, LocalDateTime end) {
-        return auditLogRepository.findByUserIdAndChangeTimeBetween(userId, start, end);
+    public Page<AuditLog> findByDateRange(LocalDateTime start, LocalDateTime end, Pageable pageable) {
+        return auditLogRepository.findByChangeTimeBetween(start, end, pageable);
     }
 
-    public List<AuditLog> findByTableAndRecordId(String tableName, Integer recordId) {
-        return auditLogRepository.findByTableNameAndRecordId(tableName, recordId);
-    }
-
-    public List<AuditLog> findLatest(int limit) {
-        return auditLogRepository.findLatestWithUser(limit);
-    }
-
-    public List<AuditLog> searchLogs(String search, String operation, String table) {
-        List<AuditLog> logs = findAll();
-        
-        if (search != null && !search.isEmpty()) {
-            String searchLower = search.toLowerCase();
-            logs = logs.stream()
-                    .filter(log -> 
-                        (log.getTableName() != null && log.getTableName().toLowerCase().contains(searchLower)) ||
-                        (log.getOperationType() != null && log.getOperationType().toLowerCase().contains(searchLower)) ||
-                        (log.getUser() != null && log.getUser().getLogin() != null && 
-                         log.getUser().getLogin().toLowerCase().contains(searchLower))
-                    )
-                    .toList();
+    public Page<AuditLog> searchLogs(String search, String operation, String table, Pageable pageable) {
+        if (search == null || search.isEmpty()) {
+            return findAll(pageable);
         }
-        
-        if (operation != null && !operation.isEmpty()) {
-            logs = logs.stream()
-                    .filter(log -> operation.equals(log.getOperationType()))
-                    .toList();
-        }
-        
-        if (table != null && !table.isEmpty()) {
-            logs = logs.stream()
-                    .filter(log -> table.equals(log.getTableName()))
-                    .toList();
-        }
-        
-        return logs;
+        return auditLogRepository.searchLogs(search.toLowerCase(), operation, table, pageable);
     }
 
     @Transactional
@@ -104,10 +77,7 @@ public class AuditLogService {
 
     @Transactional
     public void deleteOldLogs(LocalDateTime beforeDate) {
-        List<AuditLog> oldLogs = auditLogRepository.findByChangeTimeBetween(
-                LocalDateTime.of(1970, 1, 1, 0, 0), beforeDate
-        );
-        auditLogRepository.deleteAll(oldLogs);
+        auditLogRepository.deleteByChangeTimeBefore(beforeDate);
     }
 
     @Transactional
