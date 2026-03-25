@@ -25,30 +25,14 @@ public interface AuditLogRepository extends JpaRepository<AuditLog, Long> {
     
     void deleteByChangeTimeBefore(LocalDateTime dateTime);
 
-    @Query("SELECT a FROM AuditLog a LEFT JOIN FETCH a.user u ORDER BY a.changeTime DESC")
-    Page<AuditLog> findAllWithUser(Pageable pageable);
-
-    @Query("SELECT a FROM AuditLog a LEFT JOIN FETCH a.user u WHERE a.tableName = :tableName ORDER BY a.changeTime DESC")
-    Page<AuditLog> findByTableNameWithUser(@Param("tableName") String tableName, Pageable pageable);
-
-    @Query(value = "SELECT a.* FROM audit_log a " +
-           "LEFT JOIN users u ON a.id_user = u.id_user " +
-           "WHERE (:search IS NULL OR :search = '' OR " +
-           "LOWER(a.table_name) LIKE CONCAT('%', :search, '%') OR " +
-           "LOWER(a.operation_type) LIKE CONCAT('%', :search, '%') OR " +
-           "LOWER(u.login) LIKE CONCAT('%', :search, '%')) AND " +
-           "(:operation IS NULL OR :operation = '' OR a.operation_type = :operation) AND " +
-           "(:table IS NULL OR :table = '' OR a.table_name = :table) " +
-           "ORDER BY a.change_time DESC",
-           countQuery = "SELECT COUNT(*) FROM audit_log a " +
-           "LEFT JOIN users u ON a.id_user = u.id_user " +
-           "WHERE (:search IS NULL OR :search = '' OR " +
-           "LOWER(a.table_name) LIKE CONCAT('%', :search, '%') OR " +
-           "LOWER(a.operation_type) LIKE CONCAT('%', :search, '%') OR " +
-           "LOWER(u.login) LIKE CONCAT('%', :search, '%')) AND " +
-           "(:operation IS NULL OR :operation = '' OR a.operation_type = :operation) AND " +
-           "(:table IS NULL OR :table = '' OR a.table_name = :table)",
-           nativeQuery = true)
+    @Query("SELECT a FROM AuditLog a LEFT JOIN FETCH a.user u WHERE " +
+           "(:search IS NULL OR :search = '' OR " +
+           "LOWER(a.tableName) LIKE CONCAT('%', LOWER(:search), '%') OR " +
+           "LOWER(a.operationType) LIKE CONCAT('%', LOWER(:search), '%') OR " +
+           "LOWER(a.user.login) LIKE CONCAT('%', LOWER(:search), '%')) AND " +
+           "(:operation IS NULL OR :operation = '' OR a.operationType = :operation) AND " +
+           "(:table IS NULL OR :table = '' OR a.tableName = :table) " +
+           "ORDER BY a.changeTime DESC")
     Page<AuditLog> searchLogs(@Param("search") String search,
                               @Param("operation") String operation,
                               @Param("table") String table,

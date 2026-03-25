@@ -28,7 +28,7 @@ public class AuditLogService {
     }
 
     public Page<AuditLog> findAll(Pageable pageable) {
-        return auditLogRepository.findAllWithUser(pageable);
+        return auditLogRepository.findAll(pageable);
     }
 
     public Optional<AuditLog> findById(Long id) {
@@ -56,10 +56,7 @@ public class AuditLogService {
     }
 
     public Page<AuditLog> searchLogs(String search, String operation, String table, Pageable pageable) {
-        if (search == null || search.isEmpty()) {
-            return findAll(pageable);
-        }
-        return auditLogRepository.searchLogs(search.toLowerCase(), operation, table, pageable);
+        return auditLogRepository.searchLogs(search, operation, table, pageable);
     }
 
     @Transactional

@@ -29,20 +29,41 @@ public class AuditLogController {
             @RequestParam(required = false) String operation,
             @RequestParam(required = false) String table) {
         
+        System.out.println("=== AUDIT LOG REQUEST ===");
+        System.out.println("Page: " + page);
+        System.out.println("Size: " + size);
+        System.out.println("Search: " + search);
+        System.out.println("Operation: " + operation);
+        System.out.println("Table: " + table);
+        
+        // Создаем Pageable с сортировкой по убыванию даты (новые сверху)
         Pageable pageable = PageRequest.of(page, size, Sort.by("changeTime").descending());
         Page<AuditLog> auditPage;
         
         // Используем разные методы в зависимости от фильтров
         if (search != null && !search.isEmpty()) {
+            System.out.println("Using searchLogs");
             auditPage = auditLogService.searchLogs(search, operation, table, pageable);
         } else if (operation != null && !operation.isEmpty() && table != null && !table.isEmpty()) {
+            System.out.println("Using findByOperationAndTable");
             auditPage = auditLogService.findByOperationAndTable(operation, table, pageable);
         } else if (operation != null && !operation.isEmpty()) {
+            System.out.println("Using findByOperationType");
             auditPage = auditLogService.findByOperationType(operation, pageable);
         } else if (table != null && !table.isEmpty()) {
+            System.out.println("Using findByTableName");
             auditPage = auditLogService.findByTableName(table, pageable);
         } else {
+            System.out.println("Using findAll");
             auditPage = auditLogService.findAll(pageable);
+        }
+        
+        System.out.println("Total elements: " + auditPage.getTotalElements());
+        System.out.println("Total pages: " + auditPage.getTotalPages());
+        System.out.println("Current page elements: " + auditPage.getContent().size());
+        if (!auditPage.getContent().isEmpty()) {
+            System.out.println("First element date: " + auditPage.getContent().get(0).getChangeTime());
+            System.out.println("Last element date: " + auditPage.getContent().get(auditPage.getContent().size() - 1).getChangeTime());
         }
         
         Map<String, Object> response = new HashMap<>();

@@ -667,6 +667,90 @@ async function saveNewEmployee() {
     }
 }
 
+async function forceRefreshAudit() {
+    if (currentAuditPage === 1) {
+        // Если мы на первой странице, просто перезагружаем
+        await loadAuditLog();
+    } else {
+        // Если не на первой, переходим на первую и перезагружаем
+        currentAuditPage = 1;
+        await loadAuditLog();
+    }
+}
+
+// Обновите функцию saveNewEmployeeWithAudit
+async function saveNewEmployeeWithAudit() {
+    if (!isAdmin()) {
+        showNotification('У вас нет прав для добавления сотрудников', 'error');
+        return;
+    }
+    
+    const password = document.getElementById('empPassword').value;
+    const confirmPassword = document.getElementById('empConfirmPassword').value;
+    
+    if (password !== confirmPassword) {
+        showNotification('Пароли не совпадают', 'error');
+        return;
+    }
+    
+    if (!password || password.length < 4) {
+        showNotification('Пароль должен содержать минимум 4 символа', 'error');
+        return;
+    }
+    
+    const surname = document.getElementById('empSurname').value.trim();
+    const name = document.getElementById('empName').value.trim();
+    const patronymic = document.getElementById('empPatronymic').value.trim();
+    const login = document.getElementById('empLogin').value.trim();
+    
+    if (!surname || !name || !login) {
+        showNotification('Заполните все обязательные поля (Фамилия, Имя, Логин)', 'error');
+        return;
+    }
+    
+    const roleId = document.getElementById('empRole').value;
+    const postId = document.getElementById('empPosition').value;
+    const divisionId = document.getElementById('empDivision').value;
+    const buildingId = document.getElementById('empBuilding').value;
+    
+    const data = {
+        surname, name, patronymic: patronymic || "",
+        login, password,
+        roleId: roleId ? Number(roleId) : null,
+        postId: postId ? Number(postId) : null,
+        divisionId: divisionId ? Number(divisionId) : null,
+        buildingId: buildingId ? Number(buildingId) : null,
+        mobilePhoneNumber: document.getElementById('empMobilePhone').value.trim() || "",
+        landlinePhoneNumber: document.getElementById('empLandlinePhone').value.trim() || "",
+        internalPhoneNumber: document.getElementById('empInternalPhone').value.trim() || "",
+        cabinetNumber: document.getElementById('empCabinet').value.trim() || ""
+    };
+    
+    try {
+        await safeApiCall(
+            () => api.post('/auth/register', data),
+            'Не удалось добавить сотрудника'
+        );
+        
+        showNotification('Сотрудник успешно добавлен', 'success');
+        closeAddEmployeeModal();
+        
+        document.querySelectorAll('#addEmployeeModal input').forEach(i => i.value = '');
+        document.querySelectorAll('#addEmployeeModal select').forEach(s => s.value = '');
+        
+        await loadMyContacts();
+        
+        // Принудительно обновляем аудит, если модальное окно открыто
+        const auditModal = document.getElementById('auditModal');
+        if (auditModal && auditModal.style.display === 'flex') {
+            await forceRefreshAudit();
+        }
+        
+    } catch (err) {
+        console.error('Ошибка при добавлении:', err);
+    }
+}
+
 // Функция экспорта в PDF
 async function exportToPDF() {
     try {
@@ -1010,7 +1094,6 @@ async function saveContact() {
     }
 }
 
-// Открыть модальное окно аудита
 async function openAuditModal() {
     if (!isAdmin()) {
         showNotification('Доступ запрещен. Только для администраторов', 'error');
@@ -1022,6 +1105,8 @@ async function openAuditModal() {
         modal.style.display = 'flex';
         currentAuditPage = 1;
         await loadAuditLog();
+        
+        // Добавляем обработчик для обновления аудита при фокусе на модальном окне
     }
 }
 
@@ -1039,17 +1124,25 @@ async function loadAuditLog() {
         const searchTerm = document.getElementById('auditSearch')?.value || '';
         const operationFilter = document.getElementById('auditOperationFilter')?.value || '';
         const tableFilter = document.getElementById('auditTableFilter')?.value || '';
+    
+        const pageForBackend = currentAuditPage - 1;
         
         // Формируем URL с параметрами
-        let url = '/api/audit?page=' + currentAuditPage + '&size=20';
+        let url = '/api/audit?page=' + pageForBackend + '&size=20';
         if (searchTerm) url += '&search=' + encodeURIComponent(searchTerm);
         if (operationFilter) url += '&operation=' + operationFilter;
         if (tableFilter) url += '&table=' + tableFilter;
+        
+        console.log('Loading audit log - Frontend page:', currentAuditPage, 'Backend page:', pageForBackend);
         
         const response = await safeApiCall(() => api.get(url), 'Не удалось загрузить журнал аудита');
         
         auditData = response.content || [];
         auditTotalPages = response.totalPages || 1;
+        
+        console.log(`Loaded ${auditData.length} records, total pages: ${auditTotalPages}`);
+        console.log('First item date:', auditData[0]?.changeTime);
+        console.log('Last item date:', auditData[auditData.length-1]?.changeTime);
         
         renderAuditTable();
         updateAuditPagination();
@@ -1270,7 +1363,7 @@ function toggleAuditButton() {
 window.deleteContact = deleteContact;
 window.openAddEmployeeModal = openAddEmployeeModal;
 window.closeAddEmployeeModal = closeAddEmployeeModal;
-window.saveNewEmployee = saveNewEmployee;
+window.saveNewEmployee = saveNewEmployeeWithAudit;
 window.exportToPDF = exportToPDF;
 window.toggleCategory = toggleCategory;
 window.selectContact = selectContact;
