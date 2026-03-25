@@ -43,22 +43,31 @@ public class SubscriberService {
 
     @Transactional
     public Subscriber createSubscriber(Long userId, Integer postId, Integer divisionId,
-                                       Integer buildingId, LocalDate dateBirth,
-                                       String cabinetNumber, String internalPhoneNumber,
-                                       String landlinePhoneNumber, String mobilePhoneNumber) {
+                                    Integer buildingId, LocalDate dateBirth,
+                                    String cabinetNumber, String internalPhoneNumber,
+                                    String landlinePhoneNumber, String mobilePhoneNumber) {
 
         // Находим все связанные сущности с проверками
         User user = userService.findById(userId)
                 .orElseThrow(() -> new RuntimeException("Пользователь с ID " + userId + " не найден"));
 
-        Post post = postService.findById(postId)
-                .orElseThrow(() -> new RuntimeException("Должность с ID " + postId + " не найдена"));
+        Post post = null;
+        if (postId != null) {
+            post = postService.findById(postId)
+                    .orElseThrow(() -> new RuntimeException("Должность с ID " + postId + " не найдена"));
+        }
 
-        Division division = divisionService.findById(divisionId)
-                .orElseThrow(() -> new RuntimeException("Отдел с ID " + divisionId + " не найден"));
+        Division division = null;
+        if (divisionId != null) {
+            division = divisionService.findById(divisionId)
+                    .orElseThrow(() -> new RuntimeException("Отдел с ID " + divisionId + " не найден"));
+        }
 
-        Building building = buildingService.findById(buildingId)
-                .orElseThrow(() -> new RuntimeException("Здание с ID " + buildingId + " не найдено"));
+        Building building = null;
+        if (buildingId != null) {
+            building = buildingService.findById(buildingId)
+                    .orElseThrow(() -> new RuntimeException("Здание с ID " + buildingId + " не найдено"));
+        }
 
         // Очистка номеров телефонов от форматирования
         String cleanMobile = cleanPhoneNumber(mobilePhoneNumber);
@@ -107,7 +116,7 @@ public class SubscriberService {
                 mobilePhoneNumber != null ? mobilePhoneNumber : ""
         );
 
-        return subscriberRepository.save(subscriber);
+        return subscriberRepository.save(subscriber); // Возвращаем сохраненного абонента
     }
 
     @Transactional

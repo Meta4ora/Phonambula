@@ -11,7 +11,6 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.HashMap;
-import java.util.List;
 import java.util.Map;
 
 @RestController
@@ -33,6 +32,7 @@ public class AuditLogController {
         Pageable pageable = PageRequest.of(page, size, Sort.by("changeTime").descending());
         Page<AuditLog> auditPage;
         
+        // Используем разные методы в зависимости от фильтров
         if (search != null && !search.isEmpty()) {
             auditPage = auditLogService.searchLogs(search, operation, table, pageable);
         } else if (operation != null && !operation.isEmpty() && table != null && !table.isEmpty()) {

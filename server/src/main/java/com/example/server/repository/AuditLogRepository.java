@@ -9,7 +9,6 @@ import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 
 import java.time.LocalDateTime;
-import java.util.List;
 
 @Repository
 public interface AuditLogRepository extends JpaRepository<AuditLog, Long> {
@@ -24,8 +23,6 @@ public interface AuditLogRepository extends JpaRepository<AuditLog, Long> {
     
     Page<AuditLog> findByOperationTypeAndTableName(String operationType, String tableName, Pageable pageable);
     
-    List<AuditLog> findByTableNameAndRecordId(String tableName, Integer recordId);
-    
     void deleteByChangeTimeBefore(LocalDateTime dateTime);
 
     @Query("SELECT a FROM AuditLog a LEFT JOIN FETCH a.user u ORDER BY a.changeTime DESC")
@@ -34,14 +31,24 @@ public interface AuditLogRepository extends JpaRepository<AuditLog, Long> {
     @Query("SELECT a FROM AuditLog a LEFT JOIN FETCH a.user u WHERE a.tableName = :tableName ORDER BY a.changeTime DESC")
     Page<AuditLog> findByTableNameWithUser(@Param("tableName") String tableName, Pageable pageable);
 
-    @Query("SELECT a FROM AuditLog a LEFT JOIN FETCH a.user u WHERE " +
-           "(:search IS NULL OR :search = '' OR " +
-           "LOWER(a.tableName) LIKE CONCAT('%', :search, '%') OR " +
-           "LOWER(a.operationType) LIKE CONCAT('%', :search, '%') OR " +
-           "LOWER(a.user.login) LIKE CONCAT('%', :search, '%')) AND " +
-           "(:operation IS NULL OR :operation = '' OR a.operationType = :operation) AND " +
-           "(:table IS NULL OR :table = '' OR a.tableName = :table) " +
-           "ORDER BY a.changeTime DESC")
+    @Query(value = "SELECT a.* FROM audit_log a " +
+           "LEFT JOIN users u ON a.id_user = u.id_user " +
+           "WHERE (:search IS NULL OR :search = '' OR " +
+           "LOWER(a.table_name) LIKE CONCAT('%', :search, '%') OR " +
+           "LOWER(a.operation_type) LIKE CONCAT('%', :search, '%') OR " +
+           "LOWER(u.login) LIKE CONCAT('%', :search, '%')) AND " +
+           "(:operation IS NULL OR :operation = '' OR a.operation_type = :operation) AND " +
+           "(:table IS NULL OR :table = '' OR a.table_name = :table) " +
+           "ORDER BY a.change_time DESC",
+           countQuery = "SELECT COUNT(*) FROM audit_log a " +
+           "LEFT JOIN users u ON a.id_user = u.id_user " +
+           "WHERE (:search IS NULL OR :search = '' OR " +
+           "LOWER(a.table_name) LIKE CONCAT('%', :search, '%') OR " +
+           "LOWER(a.operation_type) LIKE CONCAT('%', :search, '%') OR " +
+           "LOWER(u.login) LIKE CONCAT('%', :search, '%')) AND " +
+           "(:operation IS NULL OR :operation = '' OR a.operation_type = :operation) AND " +
+           "(:table IS NULL OR :table = '' OR a.table_name = :table)",
+           nativeQuery = true)
     Page<AuditLog> searchLogs(@Param("search") String search,
                               @Param("operation") String operation,
                               @Param("table") String table,
