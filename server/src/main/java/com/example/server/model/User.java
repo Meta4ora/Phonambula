@@ -63,4 +63,11 @@ public class User {
 
     public Role getIdRole() { return idRole; }
     public void setIdRole(Role idRole) { this.idRole = idRole; }
+
+    public String getFullName() {
+    return String.format("%s %s %s",
+        surname != null ? surname : "",
+        name != null ? name : "",
+        patronymic != null ? patronymic : "").trim();
+}
 }

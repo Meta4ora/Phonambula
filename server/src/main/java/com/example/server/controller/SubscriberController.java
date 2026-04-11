@@ -24,18 +24,21 @@ public class SubscriberController {
     private final PostService postService;
     private final DivisionService divisionService;
     private final BuildingService buildingService;
+    private final AuditLogService auditLogService;
 
     @Autowired
     public SubscriberController(SubscriberService subscriberService, 
                                UserService userService,
                                PostService postService,
                                DivisionService divisionService,
-                               BuildingService buildingService) {
+                               BuildingService buildingService,
+                               AuditLogService auditLogService) {
         this.subscriberService = subscriberService;
         this.userService = userService;
         this.postService = postService;
         this.divisionService = divisionService;
         this.buildingService = buildingService;
+        this.auditLogService = auditLogService;
     }
 
     // Получение всех абонентов текущего пользователя
@@ -47,7 +50,6 @@ public class SubscriberController {
         User currentUser = userService.findByLogin(login)
                 .orElseThrow(() -> new RuntimeException("Пользователь не найден"));
 
-        // Используем findAll()
         List<Subscriber> subscribers = subscriberService.findAll();
 
         List<Map<String, Object>> result = subscribers.stream()
@@ -100,13 +102,8 @@ public class SubscriberController {
             Subscriber existing = subscriberService.findById(id)
                     .orElseThrow(() -> new RuntimeException("Абонент не найден"));
 
-            boolean isAdmin = currentUser.getIdRole().getNameRole().equalsIgnoreCase("Администратор");
-            boolean isSelf = existing.getIdUser().getId().equals(currentUser.getId());
-
-            //if (!isAdmin && !isSelf) {
-            //    return ResponseEntity.status(HttpStatus.FORBIDDEN)
-            //            .body(Map.of("error", "Нет прав на редактирование"));
-            //}
+            // Сохраняем состояние ДО изменений для аудита
+            Map<String, Object> beforeMap = createSubscriberMap(existing);
 
             Subscriber updatedSubscriber = new Subscriber();
             updatedSubscriber.setId(existing.getId());
@@ -148,6 +145,19 @@ public class SubscriberController {
             }
 
             Subscriber saved = subscriberService.update(id, updatedSubscriber);
+            
+            // Сохраняем состояние ПОСЛЕ изменений для аудита
+            Map<String, Object> afterMap = createSubscriberMap(saved);
+            
+            // Записываем в аудит
+            auditLogService.createAuditLog(
+                currentUser,
+                "UPDATE",
+                "subscribers",
+                saved.getId().intValue(),
+                beforeMap,
+                afterMap
+            );
 
             return ResponseEntity.ok(toContactMap(saved));
 
@@ -162,12 +172,50 @@ public class SubscriberController {
     @DeleteMapping("/{id}")
     public ResponseEntity<?> deleteSubscriber(@PathVariable Long id) {
         try {
+            Authentication auth = SecurityContextHolder.getContext().getAuthentication();
+            String login = auth.getName();
+
+            User currentUser = userService.findByLogin(login)
+                    .orElseThrow(() -> new RuntimeException("Пользователь не найден"));
+
+            Subscriber existing = subscriberService.findById(id)
+                    .orElseThrow(() -> new RuntimeException("Абонент не найден"));
+            
+            // Сохраняем состояние ДО удаления для аудита
+            Map<String, Object> beforeMap = createSubscriberMap(existing);
+            
             subscriberService.deleteById(id);
+            
+            // Записываем в аудит
+            auditLogService.createAuditLog(
+                currentUser,
+                "DELETE",
+                "subscribers",
+                id.intValue(),
+                beforeMap,
+                null
+            );
+            
             return ResponseEntity.noContent().build();
         } catch (Exception e) {
             e.printStackTrace();
             return ResponseEntity.status(HttpStatus.BAD_REQUEST)
                     .body(Map.of("error", e.getMessage()));
         }
+    }
+    
+    // Вспомогательный метод для создания Map из Subscriber
+    private Map<String, Object> createSubscriberMap(Subscriber sub) {
+        Map<String, Object> map = new HashMap<>();
+        map.put("id", sub.getId());
+        map.put("name", sub.getIdUser().getFullName());
+        map.put("mobilePhone", sub.getMobilePhoneNumber());
+        map.put("landlinePhone", sub.getLandlinePhoneNumber());
+        map.put("internalPhone", sub.getInternalPhoneNumber());
+        map.put("cabinet", sub.getCabinetNumber());
+        map.put("position", sub.getIdPost() != null ? sub.getIdPost().getNamePost() : null);
+        map.put("department", sub.getIdDivision() != null ? sub.getIdDivision().getNameDivision() : null);
+        map.put("building", sub.getIdBuilding() != null ? sub.getIdBuilding().getNameBuilding() : null);
+        return map;
     }
 }

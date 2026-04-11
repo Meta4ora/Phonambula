@@ -4,7 +4,6 @@ import com.example.server.model.AuditLog;
 import com.example.server.service.AuditLogService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.domain.Page;
-import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
@@ -12,7 +11,6 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.HashMap;
-import java.util.List;
 import java.util.Map;
 
 @RestController
@@ -31,30 +29,48 @@ public class AuditLogController {
             @RequestParam(required = false) String operation,
             @RequestParam(required = false) String table) {
         
-        List<AuditLog> logs;
+        System.out.println("=== AUDIT LOG REQUEST ===");
+        System.out.println("Page: " + page);
+        System.out.println("Size: " + size);
+        System.out.println("Search: " + search);
+        System.out.println("Operation: " + operation);
+        System.out.println("Table: " + table);
         
+        // Создаем Pageable с сортировкой по убыванию даты (новые сверху)
+        Pageable pageable = PageRequest.of(page, size, Sort.by("changeTime").descending());
+        Page<AuditLog> auditPage;
+        
+        // Используем разные методы в зависимости от фильтров
         if (search != null && !search.isEmpty()) {
-            logs = auditLogService.searchLogs(search, operation, table);
+            System.out.println("Using searchLogs");
+            auditPage = auditLogService.searchLogs(search, operation, table, pageable);
+        } else if (operation != null && !operation.isEmpty() && table != null && !table.isEmpty()) {
+            System.out.println("Using findByOperationAndTable");
+            auditPage = auditLogService.findByOperationAndTable(operation, table, pageable);
         } else if (operation != null && !operation.isEmpty()) {
-            logs = auditLogService.findByOperationType(operation);
+            System.out.println("Using findByOperationType");
+            auditPage = auditLogService.findByOperationType(operation, pageable);
         } else if (table != null && !table.isEmpty()) {
-            logs = auditLogService.findByTableName(table);
+            System.out.println("Using findByTableName");
+            auditPage = auditLogService.findByTableName(table, pageable);
         } else {
-            logs = auditLogService.findAll();
+            System.out.println("Using findAll");
+            auditPage = auditLogService.findAll(pageable);
         }
         
-        // Пагинация
-        Pageable pageable = PageRequest.of(page, size, Sort.by("changeTime").descending());
-        int start = (int) pageable.getOffset();
-        int end = Math.min((start + pageable.getPageSize()), logs.size());
-        
-        List<AuditLog> pageContent = start < logs.size() ? logs.subList(start, end) : List.of();
+        System.out.println("Total elements: " + auditPage.getTotalElements());
+        System.out.println("Total pages: " + auditPage.getTotalPages());
+        System.out.println("Current page elements: " + auditPage.getContent().size());
+        if (!auditPage.getContent().isEmpty()) {
+            System.out.println("First element date: " + auditPage.getContent().get(0).getChangeTime());
+            System.out.println("Last element date: " + auditPage.getContent().get(auditPage.getContent().size() - 1).getChangeTime());
+        }
         
         Map<String, Object> response = new HashMap<>();
-        response.put("content", pageContent);
-        response.put("totalPages", (int) Math.ceil((double) logs.size() / size));
-        response.put("totalElements", logs.size());
-        response.put("currentPage", page);
+        response.put("content", auditPage.getContent());
+        response.put("totalPages", auditPage.getTotalPages());
+        response.put("totalElements", auditPage.getTotalElements());
+        response.put("currentPage", auditPage.getNumber());
         
         return ResponseEntity.ok(response);
     }
@@ -67,20 +83,32 @@ public class AuditLogController {
     }
 
     @GetMapping("/user/{userId}")
-    public ResponseEntity<List<AuditLog>> getAuditLogsByUserId(@PathVariable Long userId) {
-        List<AuditLog> logs = auditLogService.findByUserId(userId);
+    public ResponseEntity<Page<AuditLog>> getAuditLogsByUserId(
+            @PathVariable Long userId,
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "20") int size) {
+        Pageable pageable = PageRequest.of(page, size, Sort.by("changeTime").descending());
+        Page<AuditLog> logs = auditLogService.findByUserId(userId, pageable);
         return ResponseEntity.ok(logs);
     }
 
     @GetMapping("/table/{tableName}")
-    public ResponseEntity<List<AuditLog>> getAuditLogsByTableName(@PathVariable String tableName) {
-        List<AuditLog> logs = auditLogService.findByTableName(tableName);
+    public ResponseEntity<Page<AuditLog>> getAuditLogsByTableName(
+            @PathVariable String tableName,
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "20") int size) {
+        Pageable pageable = PageRequest.of(page, size, Sort.by("changeTime").descending());
+        Page<AuditLog> logs = auditLogService.findByTableName(tableName, pageable);
         return ResponseEntity.ok(logs);
     }
 
     @GetMapping("/operation/{operationType}")
-    public ResponseEntity<List<AuditLog>> getAuditLogsByOperationType(@PathVariable String operationType) {
-        List<AuditLog> logs = auditLogService.findByOperationType(operationType);
+    public ResponseEntity<Page<AuditLog>> getAuditLogsByOperationType(
+            @PathVariable String operationType,
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "20") int size) {
+        Pageable pageable = PageRequest.of(page, size, Sort.by("changeTime").descending());
+        Page<AuditLog> logs = auditLogService.findByOperationType(operationType, pageable);
         return ResponseEntity.ok(logs);
     }
 
