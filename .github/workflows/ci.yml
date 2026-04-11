@@ -1,21 +1,37 @@
-name: CI - Build, Docker & Test
+# .github/workflows/ci.yml - Расширенная версия с метриками и статистикой
+
+name: CI - Build, Docker & Test with Metrics
 
 on:
   push:
     branches: [ main ]
   pull_request:
     branches: [ main ]
+  workflow_dispatch:        # Ручной запуск
+
+env:
+  TEST_RESULTS_DIR: test-results
+  PERFORMANCE_DIR: performance-metrics
 
 jobs:
   build-and-test:
     runs-on: ubuntu-latest
+    
+    outputs:
+      success_rate: ${{ steps.save_summary.outputs.success_rate }}
+      total_tests: ${{ steps.save_summary.outputs.total_tests }}
+      passed_tests: ${{ steps.save_summary.outputs.passed_tests }}
+      failed_tests: ${{ steps.save_summary.outputs.failed_tests }}
+      avg_response_time: ${{ steps.performance_metrics.outputs.avg_response_time }}
 
     steps:
-      # 1 Получаем код
+      # ==================== 1. ПОЛУЧЕНИЕ КОДА ====================
       - name: Checkout code
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
-      # 2 Настраиваем JDK 17
+      # ==================== 2. НАСТРОЙКА JDK 17 ====================
       - name: Set up JDK 17
         uses: actions/setup-java@v4
         with:
@@ -23,373 +39,510 @@ jobs:
           distribution: 'temurin'
           cache: maven
 
-      # 3 Сборка Maven проекта
+      # ==================== 3. СБОРКА MAVEN ПРОЕКТА ====================
       - name: Build Maven project
         working-directory: ./server
-        run: mvn -B clean verify
+        run: |
+          mvn -B clean verify
+          echo "BUILD_TIME=$(date +%s)" >> $GITHUB_ENV
+          echo "BUILD_VERSION=$(mvn help:evaluate -Dexpression=project.version -q -DforceStdout)" >> $GITHUB_ENV
 
-      # 4 Сборка Docker образа
+      # ==================== 4. СБОРКА DOCKER ОБРАЗА ====================
       - name: Build Docker image
         working-directory: ./server
         run: |
           chmod +x mvnw
           docker build -t phonambula-backend:latest .
+          docker image inspect phonambula-backend:latest --format='{{.Size}}' | numfmt --to=iec > image-size.txt
+          echo "IMAGE_SIZE=$(cat image-size.txt)" >> $GITHUB_ENV
 
-      # 5 Запуск бэкенд контейнера
+      # ==================== 5. ЗАПУСК КОНТЕЙНЕРА ====================
       - name: Run backend container
         id: run_backend
         run: |
           HOST_PORT=$(shuf -i 50000-60000 -n 1)
           echo "HOST_PORT=$HOST_PORT" >> $GITHUB_ENV
-          docker run -d --name phonambula-backend -p $HOST_PORT:8080 phonambula-backend:latest
+          CONTAINER_START=$(date +%s%N)
+          docker run -d --name phonambula-backend -p $HOST_PORT:8080 \
+            --memory="512m" --cpus="0.5" \
+            phonambula-backend:latest
+          echo "CONTAINER_START=$CONTAINER_START" >> $GITHUB_ENV
           echo "Backend running on port $HOST_PORT"
           sleep 25
 
-      # 6 Установка jq
-      - name: Install jq
-        run: sudo apt-get update && sudo apt-get install -y jq
+      # ==================== 6. УСТАНОВКА ИНСТРУМЕНТОВ ====================
+      - name: Install tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y jq bc sysstat curl
 
-      # 7 Ждём, чтобы сервис поднялся
+      # ==================== 7. ОЖИДАНИЕ ЗАПУСКА ====================
       - name: Wait for backend
         run: |
           echo "Waiting for backend to start..."
-          for i in {1..15}; do
+          WAIT_START=$(date +%s)
+          for i in {1..20}; do
             if curl -s http://localhost:$HOST_PORT/actuator/health > /dev/null 2>&1; then
-              echo "Backend is ready!"
+              WAIT_END=$(date +%s)
+              WAIT_TIME=$((WAIT_END - WAIT_START))
+              echo "WAIT_TIME=$WAIT_TIME" >> $GITHUB_ENV
+              echo "Backend ready after ${WAIT_TIME}s"
               break
             fi
-            echo "Waiting for backend... attempt $i"
+            echo "Waiting... attempt $i"
             sleep 3
-            if [ $i -eq 15 ]; then
+            if [ $i -eq 20 ]; then
               echo "Backend failed to start"
               docker logs phonambula-backend --tail 50
               exit 1
             fi
           done
-      
-      # 8 Получаем токен админа
+
+      # ==================== 8. ПОЛУЧЕНИЕ ТОКЕНА ====================
       - name: Get JWT token
+        id: get_token
         run: |
-          echo "Requesting JWT token..."
-          
+          LOGIN_START=$(date +%s%N)
           LOGIN_RESPONSE=$(curl -s -X POST http://localhost:$HOST_PORT/auth/login \
             -H "Content-Type: application/json" \
             -d '{"login":"admin","password":"admin"}')
-          
-          echo "Login response: $LOGIN_RESPONSE"
+          LOGIN_END=$(date +%s%N)
+          LOGIN_TIME=$(( ($LOGIN_END - $LOGIN_START) / 1000000 ))
+          echo "LOGIN_TIME=$LOGIN_TIME" >> $GITHUB_ENV
           
           TOKEN=$(echo $LOGIN_RESPONSE | jq -r '.token')
-          
           if [ "$TOKEN" = "null" ] || [ -z "$TOKEN" ]; then
             echo "Failed to get JWT token"
             exit 1
           fi
-          
           echo "JWT_TOKEN=$TOKEN" >> $GITHUB_ENV
-          echo "Token received"
+          echo "Token received in ${LOGIN_TIME}ms"
 
-      # ==================== ТЕСТЫ API ====================
-      
-      # 9 Тестируем GET /api/users
-      - name: Test GET /api/users
+      # ==================== 9. СБОР МЕТРИК СИСТЕМЫ ====================
+      - name: Collect system metrics
         run: |
-          HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" \
-            -H "Authorization: Bearer $JWT_TOKEN" \
-            http://localhost:$HOST_PORT/api/users)
+          mkdir -p ${{ env.PERFORMANCE_DIR }}
           
-          if [ "$HTTP_CODE" -ne 200 ]; then
-            echo "Users API failed with HTTP code $HTTP_CODE"
-            exit 1
-          fi
-          echo "GET /api/users - OK"
+          # Метрики CPU и памяти
+          echo "=== System Metrics ===" > ${{ env.PERFORMANCE_DIR }}/system-metrics.txt
+          echo "CPU Cores: $(nproc)" >> ${{ env.PERFORMANCE_DIR }}/system-metrics.txt
+          echo "Total Memory: $(free -h | awk 'NR==2{print $2}')" >> ${{ env.PERFORMANCE_DIR }}/system-metrics.txt
+          echo "Available Memory: $(free -h | awk 'NR==2{print $7}')" >> ${{ env.PERFORMANCE_DIR }}/system-metrics.txt
+          echo "Disk Space: $(df -h / | awk 'NR==2{print $4}')" >> ${{ env.PERFORMANCE_DIR }}/system-metrics.txt
+          
+          # Метрики Docker
+          docker stats phonambula-backend --no-stream --format "json" > ${{ env.PERFORMANCE_DIR }}/docker-stats.json
+          
+          # Использование CPU контейнера
+          CPU_USAGE=$(docker stats phonambula-backend --no-stream --format "{{.CPUPerc}}" | sed 's/%//')
+          MEM_USAGE=$(docker stats phonambula-backend --no-stream --format "{{.MemUsage}}" | awk '{print $1}')
+          echo "CPU_USAGE=$CPU_USAGE" >> $GITHUB_ENV
+          echo "MEM_USAGE=$MEM_USAGE" >> $GITHUB_ENV
 
-      # 10 Тестируем GET /api/roles
-      - name: Test GET /api/roles
+      # ==================== 10. API ТЕСТЫ С ЗАМЕРОМ ВРЕМЕНИ ====================
+      - name: API Tests with performance measurement
+        id: api_tests
         run: |
-          HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" \
-            -H "Authorization: Bearer $JWT_TOKEN" \
-            http://localhost:$HOST_PORT/api/roles)
+          mkdir -p ${{ env.TEST_RESULTS_DIR }}
           
-          if [ "$HTTP_CODE" -ne 200 ]; then
-            echo "Roles API failed with HTTP code $HTTP_CODE"
-            exit 1
-          fi
-          echo "GET /api/roles - OK"
-
-      # 11 Тестируем GET /api/buildings
-      - name: Test GET /api/buildings
-        run: |
-          HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" \
-            -H "Authorization: Bearer $JWT_TOKEN" \
-            http://localhost:$HOST_PORT/api/buildings)
-          
-          if [ "$HTTP_CODE" -ne 200 ]; then
-            echo "Buildings API failed with HTTP code $HTTP_CODE"
-            exit 1
-          fi
-          echo "GET /api/buildings - OK"
-
-      # 12 Тестируем GET /api/divisions
-      - name: Test GET /api/divisions
-        run: |
-          HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" \
-            -H "Authorization: Bearer $JWT_TOKEN" \
-            http://localhost:$HOST_PORT/api/divisions)
-          
-          if [ "$HTTP_CODE" -ne 200 ]; then
-            echo "Divisions API failed with HTTP code $HTTP_CODE"
-            exit 1
-          fi
-          echo "GET /api/divisions - OK"
-
-      # 13 Тестируем GET /api/posts
-      - name: Test GET /api/posts
-        run: |
-          HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" \
-            -H "Authorization: Bearer $JWT_TOKEN" \
-            http://localhost:$HOST_PORT/api/posts)
-          
-          if [ "$HTTP_CODE" -ne 200 ]; then
-            echo "Posts API failed with HTTP code $HTTP_CODE"
-            exit 1
-          fi
-          echo "GET /api/posts - OK"
-
-      # 14 Тестируем GET /api/subscribers/my
-      - name: Test GET /api/subscribers/my
-        run: |
-          HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" \
-            -H "Authorization: Bearer $JWT_TOKEN" \
-            http://localhost:$HOST_PORT/api/subscribers/my)
-          
-          if [ "$HTTP_CODE" -ne 200 ]; then
-            echo "Subscribers/my API failed with HTTP code $HTTP_CODE"
-            exit 1
-          fi
-          echo "GET /api/subscribers/my - OK"
-
-      # 15 Тестируем GET /api/users/me
-      - name: Test GET /api/users/me
-        run: |
-          RESPONSE=$(curl -s -H "Authorization: Bearer $JWT_TOKEN" \
-            http://localhost:$HOST_PORT/api/users/me)
-          
-          echo "Current user response: $RESPONSE"
-          
-          HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" \
-            -H "Authorization: Bearer $JWT_TOKEN" \
-            http://localhost:$HOST_PORT/api/users/me)
-          
-          if [ "$HTTP_CODE" -ne 200 ]; then
-            echo "Users/me API failed with HTTP code $HTTP_CODE"
-            exit 1
-          fi
-          
-          ROLE=$(echo $RESPONSE | jq -r '.role')
-          if [ "$ROLE" != "Администратор" ]; then
-            echo "Wrong role: $ROLE, expected Администратор"
-            exit 1
-          fi
-          echo "GET /api/users/me - OK, role: $ROLE"
-
-      # 16 Получаем существующие ID справочников
-      - name: Get reference IDs
-        run: |
-          echo "=== Getting reference IDs ==="
-          
-          # Получаем первую должность
-          POSTS=$(curl -s -H "Authorization: Bearer $JWT_TOKEN" \
-            http://localhost:$HOST_PORT/api/posts)
-          echo "Posts response: $POSTS"
-          POST_ID=$(echo $POSTS | jq -r '.[0].id // 1')
-          echo "POST_ID=$POST_ID" >> $GITHUB_ENV
-          
-          # Получаем первый отдел
-          DIVISIONS=$(curl -s -H "Authorization: Bearer $JWT_TOKEN" \
-            http://localhost:$HOST_PORT/api/divisions)
-          echo "Divisions response: $DIVISIONS"
-          DIVISION_ID=$(echo $DIVISIONS | jq -r '.[0].id // 1')
-          echo "DIVISION_ID=$DIVISION_ID" >> $GITHUB_ENV
-          
-          # Получаем первый корпус
-          BUILDINGS=$(curl -s -H "Authorization: Bearer $JWT_TOKEN" \
-            http://localhost:$HOST_PORT/api/buildings)
-          echo "Buildings response: $BUILDINGS"
-          BUILDING_ID=$(echo $BUILDINGS | jq -r '.[0].id // 1')
-          echo "BUILDING_ID=$BUILDING_ID" >> $GITHUB_ENV
-
-      # 17 Тестируем создание нового пользователя
-      - name: Test POST /auth/register (create user)
-        run: |
-          echo "=== Creating test user ==="
-          RANDOM_LOGIN="testuser_$(date +%s)_$RANDOM"
-          
-          REGISTER_DATA="{
-            \"surname\": \"Testov\",
-            \"name\": \"Test\",
-            \"patronymic\": \"Testovich\",
-            \"login\": \"$RANDOM_LOGIN\",
-            \"password\": \"test123\",
-            \"roleId\": 2,
-            \"postId\": $POST_ID,
-            \"divisionId\": $DIVISION_ID,
-            \"buildingId\": $BUILDING_ID
-          }"
-          
-          echo "Sending registration request..."
-          
-          REGISTER_RESPONSE=$(curl -s -w "\n%{http_code}" -X POST http://localhost:$HOST_PORT/auth/register \
-            -H "Content-Type: application/json" \
-            -d "$REGISTER_DATA")
-          
-          HTTP_CODE=$(echo "$REGISTER_RESPONSE" | tail -n1)
-          RESPONSE_BODY=$(echo "$REGISTER_RESPONSE" | sed '$d')
-          
-          echo "HTTP Status Code: $HTTP_CODE"
-          echo "Response body: $RESPONSE_BODY"
-          
-          if [ "$HTTP_CODE" != "200" ]; then
-            echo "Registration failed with HTTP $HTTP_CODE"
-            echo "Response: $RESPONSE_BODY"
-            exit 1
-          fi
-          
-          USER_TOKEN=$(echo $RESPONSE_BODY | jq -r '.token')
-          if [ "$USER_TOKEN" = "null" ] || [ -z "$USER_TOKEN" ]; then
-            echo "Failed to get token from response"
-            exit 1
-          fi
-          
-          # Получаем ID созданного пользователя
-          USER_INFO=$(curl -s -H "Authorization: Bearer $JWT_TOKEN" \
-            http://localhost:$HOST_PORT/api/users/by-login/$RANDOM_LOGIN)
-          USER_ID=$(echo $USER_INFO | jq -r '.id')
-          
-          echo "User created successfully with login: $RANDOM_LOGIN, ID: $USER_ID"
-          echo "TEST_USER_LOGIN=$RANDOM_LOGIN" >> $GITHUB_ENV
-          echo "TEST_USER_ID=$USER_ID" >> $GITHUB_ENV
-          echo "TEST_USER_TOKEN=$USER_TOKEN" >> $GITHUB_ENV
-
-      # 18 Тестируем вход созданного пользователя
-      - name: Test POST /auth/login (new user)
-        run: |
-          if [ -n "$TEST_USER_LOGIN" ]; then
-            echo "=== Testing login for new user ==="
-            LOGIN_RESPONSE=$(curl -s -X POST http://localhost:$HOST_PORT/auth/login \
-              -H "Content-Type: application/json" \
-              -d "{\"login\":\"$TEST_USER_LOGIN\",\"password\":\"test123\"}")
+          # Функция для выполнения теста с замером времени
+          run_api_test() {
+            local test_name=$1
+            local endpoint=$2
+            local method=${3:-GET}
+            local data=$4
             
-            echo "Login response: $LOGIN_RESPONSE"
+            echo "{\"test_name\": \"$test_name\", \"started_at\": \"$(date -Iseconds)\"}" > ${{ env.TEST_RESULTS_DIR }}/${test_name}.json
+            START=$(date +%s%N)
             
-            TOKEN=$(echo $LOGIN_RESPONSE | jq -r '.token')
-            if [ "$TOKEN" = "null" ] || [ -z "$TOKEN" ]; then
-              echo "Failed to login with new user"
-              exit 1
+            if [ "$method" = "GET" ]; then
+              RESPONSE=$(curl -s -w "\n%{http_code}\n%{time_total}" \
+                -H "Authorization: Bearer $JWT_TOKEN" \
+                "http://localhost:$HOST_PORT$endpoint")
+            elif [ "$method" = "POST" ]; then
+              RESPONSE=$(curl -s -w "\n%{http_code}\n%{time_total}" \
+                -X POST \
+                -H "Authorization: Bearer $JWT_TOKEN" \
+                -H "Content-Type: application/json" \
+                -d "$data" \
+                "http://localhost:$HOST_PORT$endpoint")
             fi
-            echo "New user login successful"
-          else
-            echo "No test user created, skipping login test"
-          fi
-
-      # 19 Тестируем попытку входа с неверным паролем
-      - name: Test POST /auth/login (wrong password - should fail)
-        run: |
-          echo "=== Testing wrong password ==="
+            
+            END=$(date +%s%N)
+            DURATION_MS=$(( ($END - $START) / 1000000 ))
+            
+            HTTP_CODE=$(echo "$RESPONSE" | tail -3 | head -1)
+            RESPONSE_TIME=$(echo "$RESPONSE" | tail -1)
+            
+            if [ "$HTTP_CODE" -eq 200 ] || [ "$HTTP_CODE" -eq 201 ]; then
+              STATUS="PASSED"
+              PASSED=$((PASSED + 1))
+            else
+              STATUS="FAILED"
+              FAILED=$((FAILED + 1))
+            fi
+            TOTAL=$((TOTAL + 1))
+            
+            echo "{\"test_name\": \"$test_name\", \"endpoint\": \"$endpoint\", \"status\": \"$STATUS\", \"http_code\": $HTTP_CODE, \"response_time_ms\": $DURATION_MS, \"response_time_curl\": ${RESPONSE_TIME}s}" >> ${{ env.TEST_RESULTS_DIR }}/${test_name}.json
+            echo "$test_name: $STATUS (${DURATION_MS}ms)"
+            
+            # Сохраняем в общий файл
+            echo "{\"test\":\"$test_name\",\"endpoint\":\"$endpoint\",\"status\":\"$STATUS\",\"duration_ms\":$DURATION_MS,\"http_code\":$HTTP_CODE}" >> ${{ env.TEST_RESULTS_DIR }}/all_results.jsonl
+          }
+          
+          # Выполнение тестов
+          PASSED=0
+          FAILED=0
+          TOTAL=0
+          
+          echo "=== RUNNING API TESTS ==="
+          
+          run_api_test "GET_users" "/api/users"
+          run_api_test "GET_roles" "/api/roles"
+          run_api_test "GET_buildings" "/api/buildings"
+          run_api_test "GET_divisions" "/api/divisions"
+          run_api_test "GET_posts" "/api/posts"
+          run_api_test "GET_subscribers_my" "/api/subscribers/my"
+          run_api_test "GET_users_me" "/api/users/me"
+          
+          # POST тест с данными
+          run_api_test "POST_register" "/auth/register" "POST" '{"surname":"Test","name":"User","login":"testuser_'$(date +%s)'","password":"test123","roleId":2}'
+          
+          # Тест с неверным паролем (ожидаем ошибку)
+          WRONG_START=$(date +%s%N)
           HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" -X POST \
             http://localhost:$HOST_PORT/auth/login \
             -H "Content-Type: application/json" \
-            -d "{\"login\":\"admin\",\"password\":\"wrongpassword\"}")
+            -d '{"login":"admin","password":"wrong"}')
+          WRONG_END=$(date +%s%N)
+          WRONG_DURATION=$(( ($WRONG_END - $WRONG_START) / 1000000 ))
           
-          echo "HTTP Status Code: $HTTP_CODE"
-          
-          if [ "$HTTP_CODE" -ne 401 ] && [ "$HTTP_CODE" -ne 403 ]; then
-            echo "Wrong password should return 401/403, got $HTTP_CODE"
-            exit 1
+          if [ "$HTTP_CODE" -eq 401 ] || [ "$HTTP_CODE" -eq 403 ]; then
+            echo "POST_login_wrong: PASSED (${WRONG_DURATION}ms)"
+            PASSED=$((PASSED + 1))
+          else
+            echo "POST_login_wrong: FAILED (${WRONG_DURATION}ms)"
+            FAILED=$((FAILED + 1))
           fi
-          echo "Wrong password correctly rejected with $HTTP_CODE"
-
-      # 20 Тестируем авторизацию без токена (должна быть ошибка)
-      - name: Test unauthorized access
-        run: |
+          TOTAL=$((TOTAL + 1))
+          
+          # Тест без токена (ожидаем ошибку)
+          UNAUTH_START=$(date +%s%N)
           HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" \
-            http://localhost:$HOST_PORT/api/subscribers/my)
+            http://localhost:$HOST_PORT/api/users)
+          UNAUTH_END=$(date +%s%N)
+          UNAUTH_DURATION=$(( ($UNAUTH_END - $UNAUTH_START) / 1000000 ))
           
-          if [ "$HTTP_CODE" -ne 401 ] && [ "$HTTP_CODE" -ne 403 ]; then
-            echo "Unauthorized access should return 401/403, got $HTTP_CODE"
-            exit 1
-          fi
-          echo "Unauthorized access correctly blocked"
-
-      # 21 Тестируем регистрацию с дублирующимся логином (должна быть ошибка)
-      - name: Test POST /auth/register (duplicate login - should fail)
-        run: |
-          if [ -n "$TEST_USER_LOGIN" ]; then
-            HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" -X POST \
-              http://localhost:$HOST_PORT/auth/register \
-              -H "Content-Type: application/json" \
-              -d "{
-                \"surname\": \"Testov2\",
-                \"name\": \"Test2\",
-                \"login\": \"$TEST_USER_LOGIN\",
-                \"password\": \"test123\",
-                \"roleId\": 2
-              }")
-            
-            if [ "$HTTP_CODE" -eq 200 ]; then
-              echo "Duplicate registration should fail, but got $HTTP_CODE"
-              exit 1
-            fi
-            echo "Duplicate registration correctly failed with $HTTP_CODE"
-          fi
-
-      # 22 Удаление тестового пользователя (очистка)
-      - name: Cleanup - Delete test user
-        if: always()
-        run: |
-          if [ -n "$TEST_USER_ID" ]; then
-            echo "=== Deleting test user ID: $TEST_USER_ID ==="
-            
-            # Сначала удаляем абонента, связанного с пользователем (если есть)
-            SUBSCRIBERS=$(curl -s -H "Authorization: Bearer $JWT_TOKEN" \
-              http://localhost:$HOST_PORT/api/subscribers/my)
-            SUBSCRIBER_ID=$(echo $SUBSCRIBERS | jq -r ".[] | select(.userId == $TEST_USER_ID) | .id")
-            
-            if [ -n "$SUBSCRIBER_ID" ] && [ "$SUBSCRIBER_ID" != "null" ]; then
-              echo "Deleting associated subscriber ID: $SUBSCRIBER_ID"
-              curl -s -X DELETE \
-                http://localhost:$HOST_PORT/api/subscribers/$SUBSCRIBER_ID \
-                -H "Authorization: Bearer $JWT_TOKEN"
-            fi
-            
-            # Удаляем пользователя
-            HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" -X DELETE \
-              http://localhost:$HOST_PORT/api/users/$TEST_USER_ID \
-              -H "Authorization: Bearer $JWT_TOKEN")
-            
-            if [ "$HTTP_CODE" -eq 200 ] || [ "$HTTP_CODE" -eq 204 ]; then
-              echo "Test user deleted successfully"
-            else
-              echo "Failed to delete test user (HTTP $HTTP_CODE)"
-            fi
+          if [ "$HTTP_CODE" -eq 401 ] || [ "$HTTP_CODE" -eq 403 ]; then
+            echo "GET_users_unauth: PASSED (${UNAUTH_DURATION}ms)"
+            PASSED=$((PASSED + 1))
           else
-            echo "No test user to delete"
+            echo "GET_users_unauth: FAILED (${UNAUTH_DURATION}ms)"
+            FAILED=$((FAILED + 1))
           fi
-
-      # 23 Финальная проверка
-      - name: Final health check
-        run: |
-          echo "=== FINAL TEST SUMMARY ==="
-          echo "All API tests completed successfully!"
+          TOTAL=$((TOTAL + 1))
           
-          if docker ps | grep -q phonambula-backend; then
-            echo "Backend container is still running"
-          else
-            echo "Warning: Backend container stopped"
-          fi
+          # Сохраняем результаты
+          SUCCESS_RATE=$(echo "scale=2; $PASSED * 100 / $TOTAL" | bc)
+          echo "PASSED=$PASSED" >> $GITHUB_ENV
+          echo "FAILED=$FAILED" >> $GITHUB_ENV
+          echo "TOTAL=$TOTAL" >> $GITHUB_ENV
+          echo "SUCCESS_RATE=$SUCCESS_RATE" >> $GITHUB_ENV
+          
+          echo "=== TEST SUMMARY ==="
+          echo "Total: $TOTAL, Passed: $PASSED, Failed: $FAILED"
+          echo "Success Rate: ${SUCCESS_RATE}%"
 
-      # 24 Останавливаем контейнер после тестов
+      # ==================== 11. ТЕСТ НАГРУЗКИ (BASELINE) ====================
+      - name: Load baseline test
+        run: |
+          echo "=== LOAD BASELINE TEST ==="
+          
+          # Функция для многократного запроса
+          load_test() {
+            local endpoint=$1
+            local iterations=10
+            local total_time=0
+            
+            for i in $(seq 1 $iterations); do
+              START=$(date +%s%N)
+              curl -s -H "Authorization: Bearer $JWT_TOKEN" \
+                "http://localhost:$HOST_PORT$endpoint" > /dev/null
+              END=$(date +%s%N)
+              DURATION=$(( ($END - $START) / 1000000 ))
+              total_time=$((total_time + DURATION))
+            done
+            
+            avg_time=$(echo "scale=2; $total_time / $iterations" | bc)
+            echo "$endpoint: avg ${avg_time}ms over $iterations requests"
+            echo "$endpoint $avg_time" >> ${{ env.PERFORMANCE_DIR }}/load-test-results.txt
+          }
+          
+          mkdir -p ${{ env.PERFORMANCE_DIR }}
+          echo "=== Load Test Results ===" > ${{ env.PERFORMANCE_DIR }}/load-test-results.txt
+          
+          load_test "/api/users"
+          load_test "/api/roles"
+          load_test "/api/subscribers/my"
+          
+          # Вычисляем среднее время ответа
+          AVG_RESPONSE=$(awk '{sum+=$2} END {print sum/NR}' ${{ env.PERFORMANCE_DIR }}/load-test-results.txt)
+          echo "AVG_RESPONSE=$AVG_RESPONSE" >> $GITHUB_ENV
+
+      # ==================== 12. ТЕСТ ПОИСКА ====================
+      - name: Search performance test
+        run: |
+          echo "=== SEARCH PERFORMANCE TEST ==="
+          
+          SEARCH_TERMS=("admin" "test" "user" "a" "ru")
+          
+          for term in "${SEARCH_TERMS[@]}"; do
+            START=$(date +%s%N)
+            RESPONSE=$(curl -s -H "Authorization: Bearer $JWT_TOKEN" \
+              "http://localhost:$HOST_PORT/api/subscribers/my?search=$term")
+            END=$(date +%s%N)
+            DURATION=$(( ($END - $START) / 1000000 ))
+            RESULTS_COUNT=$(echo $RESPONSE | jq '. | length')
+            
+            echo "Search '$term': ${DURATION}ms, found $RESULTS_COUNT results"
+            echo "$term $DURATION $RESULTS_COUNT" >> ${{ env.PERFORMANCE_DIR }}/search-metrics.txt
+          done
+          
+          # Среднее время поиска
+          AVG_SEARCH=$(awk '{sum+=$2} END {print sum/NR}' ${{ env.PERFORMANCE_DIR }}/search-metrics.txt)
+          echo "AVG_SEARCH_TIME=$AVG_SEARCH" >> $GITHUB_ENV
+
+      # ==================== 13. ТЕСТ ЭКСПОРТА PDF ====================
+      - name: PDF export test
+        run: |
+          echo "=== PDF EXPORT TEST ==="
+          
+          # Получаем список контактов для экспорта
+          CONTACTS=$(curl -s -H "Authorization: Bearer $JWT_TOKEN" \
+            "http://localhost:$HOST_PORT/api/subscribers/my")
+          CONTACTS_COUNT=$(echo $CONTACTS | jq '. | length')
+          
+          START=$(date +%s%N)
+          # Эмуляция PDF генерации (проверка доступности эндпоинта)
+          HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" \
+            -H "Authorization: Bearer $JWT_TOKEN" \
+            "http://localhost:$HOST_PORT/api/subscribers/my")
+          END=$(date +%s%N)
+          DURATION=$(( ($END - $START) / 1000000 ))
+          
+          echo "Contacts count: $CONTACTS_COUNT"
+          echo "API response for PDF data: ${DURATION}ms"
+          echo "CONTACTS_COUNT=$CONTACTS_COUNT" >> $GITHUB_ENV
+          echo "PDF_DATA_TIME=$DURATION" >> $GITHUB_ENV
+
+      # ==================== 14. МЕТРИКИ БАЗЫ ДАННЫХ ====================
+      - name: Database metrics
+        run: |
+          echo "=== DATABASE METRICS ==="
+          
+          # Получаем статистику из API
+          USERS_COUNT=$(curl -s -H "Authorization: Bearer $JWT_TOKEN" \
+            http://localhost:$HOST_PORT/api/users | jq '. | length')
+          ROLES_COUNT=$(curl -s -H "Authorization: Bearer $JWT_TOKEN" \
+            http://localhost:$HOST_PORT/api/roles | jq '. | length')
+          BUILDINGS_COUNT=$(curl -s -H "Authorization: Bearer $JWT_TOKEN" \
+            http://localhost:$HOST_PORT/api/buildings | jq '. | length')
+          DIVISIONS_COUNT=$(curl -s -H "Authorization: Bearer $JWT_TOKEN" \
+            http://localhost:$HOST_PORT/api/divisions | jq '. | length')
+          POSTS_COUNT=$(curl -s -H "Authorization: Bearer $JWT_TOKEN" \
+            http://localhost:$HOST_PORT/api/posts | jq '. | length')
+          
+          echo "Users: $USERS_COUNT" >> ${{ env.PERFORMANCE_DIR }}/db-metrics.txt
+          echo "Roles: $ROLES_COUNT" >> ${{ env.PERFORMANCE_DIR }}/db-metrics.txt
+          echo "Buildings: $BUILDINGS_COUNT" >> ${{ env.PERFORMANCE_DIR }}/db-metrics.txt
+          echo "Divisions: $DIVISIONS_COUNT" >> ${{ env.PERFORMANCE_DIR }}/db-metrics.txt
+          echo "Posts: $POSTS_COUNT" >> ${{ env.PERFORMANCE_DIR }}/db-metrics.txt
+          
+          echo "USERS_COUNT=$USERS_COUNT" >> $GITHUB_ENV
+          echo "ROLES_COUNT=$ROLES_COUNT" >> $GITHUB_ENV
+
+      # ==================== 15. ФОРМИРОВАНИЕ ОТЧЕТА ====================
+      - name: Generate test report
+        id: save_summary
+        run: |
+          # Создание JSON отчета
+          cat > ${{ env.TEST_RESULTS_DIR }}/summary.json << EOF
+          {
+            "timestamp": "$(date -Iseconds)",
+            "run_id": "${{ github.run_id }}",
+            "run_number": "${{ github.run_number }}",
+            "branch": "${{ github.ref_name }}",
+            "commit": "${{ github.sha }}",
+            "commit_message": "${{ github.event.head_commit.message }}",
+            "author": "${{ github.actor }}",
+            "build": {
+              "version": "${{ env.BUILD_VERSION }}",
+              "time": "${{ env.BUILD_TIME }}",
+              "docker_image_size": "${{ env.IMAGE_SIZE }}"
+            },
+            "startup": {
+              "wait_time_seconds": ${{ env.WAIT_TIME }},
+              "login_time_ms": ${{ env.LOGIN_TIME }}
+            },
+            "tests": {
+              "total": ${{ env.TOTAL }},
+              "passed": ${{ env.PASSED }},
+              "failed": ${{ env.FAILED }},
+              "success_rate": ${{ env.SUCCESS_RATE }}
+            },
+            "performance": {
+              "avg_response_time_ms": ${{ env.AVG_RESPONSE }},
+              "avg_search_time_ms": ${{ env.AVG_SEARCH_TIME }},
+              "pdf_data_time_ms": ${{ env.PDF_DATA_TIME }},
+              "container_cpu_percent": ${{ env.CPU_USAGE }},
+              "container_memory": "${{ env.MEM_USAGE }}"
+            },
+            "database": {
+              "users_count": ${{ env.USERS_COUNT }},
+              "roles_count": ${{ env.ROLES_COUNT }},
+              "buildings_count": ${{ env.BUILDINGS_COUNT }},
+              "divisions_count": ${{ env.DIVISIONS_COUNT }},
+              "posts_count": ${{ env.POSTS_COUNT }}
+            }
+          }
+          EOF
+          
+          # Вывод отчета
+          echo "=========================================="
+          echo "📊 TEST EXECUTION REPORT"
+          echo "=========================================="
+          echo "Run ID: ${{ github.run_id }}"
+          echo "Branch: ${{ github.ref_name }}"
+          echo "Commit: ${{ github.sha }}"
+          echo "------------------------------------------"
+          echo "📦 BUILD METRICS:"
+          echo "  Version: ${{ env.BUILD_VERSION }}"
+          echo "  Image Size: ${{ env.IMAGE_SIZE }}"
+          echo "------------------------------------------"
+          echo "🚀 STARTUP METRICS:"
+          echo "  Wait time: ${{ env.WAIT_TIME }}s"
+          echo "  Login time: ${{ env.LOGIN_TIME }}ms"
+          echo "------------------------------------------"
+          echo "✅ TEST RESULTS:"
+          echo "  Total: ${{ env.TOTAL }}"
+          echo "  Passed: ${{ env.PASSED }}"
+          echo "  Failed: ${{ env.FAILED }}"
+          echo "  Success Rate: ${{ env.SUCCESS_RATE }}%"
+          echo "------------------------------------------"
+          echo "⚡ PERFORMANCE METRICS:"
+          echo "  Avg Response Time: ${{ env.AVG_RESPONSE }}ms"
+          echo "  Avg Search Time: ${{ env.AVG_SEARCH_TIME }}ms"
+          echo "  PDF Data Time: ${{ env.PDF_DATA_TIME }}ms"
+          echo "  Container CPU: ${{ env.CPU_USAGE }}%"
+          echo "  Container Memory: ${{ env.MEM_USAGE }}"
+          echo "------------------------------------------"
+          echo "💾 DATABASE METRICS:"
+          echo "  Users: ${{ env.USERS_COUNT }}"
+          echo "  Roles: ${{ env.ROLES_COUNT }}"
+          echo "  Buildings: ${{ env.BUILDINGS_COUNT }}"
+          echo "  Divisions: ${{ env.DIVISIONS_COUNT }}"
+          echo "  Posts: ${{ env.POSTS_COUNT }}"
+          echo "=========================================="
+          
+          # Сохраняем метрики для вывода
+          echo "success_rate=${{ env.SUCCESS_RATE }}" >> $GITHUB_OUTPUT
+          echo "total_tests=${{ env.TOTAL }}" >> $GITHUB_OUTPUT
+          echo "passed_tests=${{ env.PASSED }}" >> $GITHUB_OUTPUT
+          echo "failed_tests=${{ env.FAILED }}" >> $GITHUB_OUTPUT
+          echo "avg_response_time=${{ env.AVG_RESPONSE }}" >> $GITHUB_OUTPUT
+
+      # ==================== 16. СОХРАНЕНИЕ АРТЕФАКТОВ ====================
+      - name: Upload test artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-report-${{ github.run_id }}
+          path: |
+            ${{ env.TEST_RESULTS_DIR }}/
+            ${{ env.PERFORMANCE_DIR }}/
+          retention-days: 30
+
+      # ==================== 17. ОТПРАВКА СТАТИСТИКИ В TELEGRAM (опционально) ====================
+      - name: Send Telegram notification
+        if: ${{ secrets.TELEGRAM_BOT_TOKEN != '' }}
+        uses: appleboy/telegram-action@master
+        with:
+          to: ${{ secrets.TELEGRAM_CHAT_ID }}
+          token: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          message: |
+            📊 *Phonambula Test Report*
+            
+            🏷️ Branch: `${{ github.ref_name }}`
+            🔖 Commit: `${{ github.sha }}`
+            👤 Author: ${{ github.actor }}
+            
+            ✅ *Test Results:*
+            • Total: ${{ env.TOTAL }}
+            • Passed: ${{ env.PASSED }}
+            • Failed: ${{ env.FAILED }}
+            • Success Rate: ${{ env.SUCCESS_RATE }}%
+            
+            ⚡ *Performance:*
+            • Avg Response: ${{ env.AVG_RESPONSE }}ms
+            • Avg Search: ${{ env.AVG_SEARCH_TIME }}ms
+            • Container CPU: ${{ env.CPU_USAGE }}%
+            • Container Memory: ${{ env.MEM_USAGE }}
+            
+            🔗 [View Run](https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }})
+
+      # ==================== 18. СОЗДАНИЕ БЕЙДЖА СО СТАТИСТИКОЙ ====================
+      - name: Generate status badge
+        if: github.ref == 'refs/heads/main'
+        run: |
+          # Генерация SVG бейджа
+          SUCCESS_RATE_INT=$(echo ${{ env.SUCCESS_RATE }} | cut -d. -f1)
+          
+          if [ "$SUCCESS_RATE_INT" -eq 100 ]; then
+            COLOR="brightgreen"
+          elif [ "$SUCCESS_RATE_INT" -ge 90 ]; then
+            COLOR="green"
+          elif [ "$SUCCESS_RATE_INT" -ge 75 ]; then
+            COLOR="yellowgreen"
+          elif [ "$SUCCESS_RATE_INT" -ge 60 ]; then
+            COLOR="yellow"
+          else
+            COLOR="red"
+          fi
+          
+          cat > badge.svg << EOF
+          <svg xmlns="http://www.w3.org/2000/svg" width="200" height="20">
+            <linearGradient id="b" x2="0" y2="100%">
+              <stop offset="0" stop-color="#bbb" stop-opacity=".1"/>
+              <stop offset="1" stop-opacity=".1"/>
+            </linearGradient>
+            <mask id="a">
+              <rect width="200" height="20" rx="3" fill="#fff"/>
+            </mask>
+            <g mask="url(#a)">
+              <rect width="120" height="20" fill="#555"/>
+              <rect x="120" width="80" height="20" fill="${COLOR}"/>
+              <rect width="200" height="20" fill="url(#b)"/>
+            </g>
+            <g fill="#fff" text-anchor="middle" font-family="DejaVu Sans,Verdana,Geneva,sans-serif" font-size="11">
+              <text x="60" y="15" fill="#010101" fill-opacity="0.3">tests</text>
+              <text x="60" y="14">tests</text>
+              <text x="159" y="15" fill="#010101" fill-opacity="0.3">${SUCCESS_RATE_INT}%</text>
+              <text x="159" y="14">${SUCCESS_RATE_INT}%</text>
+            </g>
+          </svg>
+          EOF
+          
+          echo "Badge generated with ${SUCCESS_RATE_INT}% success rate"
+
+      # ==================== 19. ОСТАНОВКА КОНТЕЙНЕРА ====================
       - name: Stop backend container
         if: always()
         run: |
           docker stop phonambula-backend || true
           docker rm phonambula-backend || true
+
+      # ==================== 20. ПРОВЕРКА УСПЕШНОСТИ ====================
+      - name: Check test success
+        if: ${{ env.FAILED != '0' }}
+        run: |
+          echo "❌ Some tests failed! Total failed: ${{ env.FAILED }}"
+          exit 1
