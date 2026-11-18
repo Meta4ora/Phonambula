@@ -120,7 +120,7 @@ jobs:
           echo "MEM_USAGE=$MEM_USAGE" >> $GITHUB_ENV
           echo "MEM_PERC=$MEM_PERC" >> $GITHUB_ENV
 
-      # ==================== ТЕСТЫ API С МЕТРИКАМИ ====================
+      # ТЕСТЫ API С МЕТРИКАМИ туут
       
       # 10 Тестируем GET /api/users
       - name: Test GET /api/users
